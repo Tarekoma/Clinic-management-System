@@ -16,11 +16,11 @@ services:
       - WEBHOOK_URL=https://n8n-ai.hakim-app.cloud
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       # SMTP configuration
-      - N8N_SMTP_HOST=mail.crocoit.com
+      - N8N_SMTP_HOST=smtp.gmail.com
       - N8N_SMTP_PORT=587
-      - N8N_SMTP_USER=a.moataz@crocoit.com
-      - N8N_SMTP_PASS=;c1dU$?%9d,q0k;S
-      - N8N_SMTP_SENDER_EMAIL=a.moataz@crocoit.com
+      - N8N_SMTP_USER=cegradproject@gmail.com
+      - N8N_SMTP_PASS=righvabrpostghdj
+      - N8N_SMTP_SENDER_EMAIL=cegradproject@gmail.com
     volumes:
       - ./n8n_data:/home/node/.n8n
 

@@ -1,0 +1,152 @@
+# app.py
+import os
+import tempfile
+import shutil
+from dotenv import load_dotenv
+load_dotenv()
+
+import whisper
+import torch
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel, Field
+from typing import List
+
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# =========================
+# إعداد FastAPI + CORS
+# =========================
+app = FastAPI(title="Intelligent Medical Assistant - ASR API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # عدّلها في الإنتاج
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# =========================
+# ✅ API KEY خاص بالسيرفر (للـ Flutter/Postman)
+# =========================
+BACKEND_API_KEY = os.getenv("BACKEND_API_KEY", "change-me")  # في الإنتاج: سيبه من غير default
+
+# =========================
+# 1) تعريف الـ Schemas
+# =========================
+class Medication(BaseModel):
+    name: str = Field(..., description="اسم الدواء باللغة الإنجليزية فقط")
+    dose: str
+    frequency: str
+    duration: str
+    notes: str
+
+class MedicalReport(BaseModel):
+    diagnosis: str
+    medications: List[Medication]
+    recommendations: List[str]
+    follow_up: str
+
+# =========================
+# 2) تحميل نموذج Whisper مرة واحدة
+# =========================
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = whisper.load_model("medium", device=device)
+
+# =========================
+# 3) إعداد Gemini + LangChain
+# =========================
+# ❌ امسح أي fallback key من الكود — لازم يكون في ENV
+google_key = os.getenv("GOOGLE_API_KEY")
+if not google_key:
+    raise RuntimeError("GOOGLE_API_KEY is not set. Please set it as an environment variable.")
+
+os.environ["GOOGLE_API_KEY"] = google_key
+
+parser = PydanticOutputParser(pydantic_object=MedicalReport)
+format_instructions = parser.get_format_instructions()
+
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.2,
+)
+
+prompt = ChatPromptTemplate.from_template("""
+أنت مساعد طبي متخصص في تنظيم تقارير العيادات.
+
+سيتم تزويدك بنص مفرغ من حديث الطبيب مع المريض.
+مهمتك:
+1. استخراج التشخيص بالعربية.
+2. استخراج خطة العلاج الدوائية بحيث تكون أسماء الأدوية بالإنجليزية فقط مع الجرعة والمواعيد والمدة والملاحظات بالعربي.
+3. استخراج التوصيات والإرشادات (نظام غذائي، رياضة، نمط حياة، تحذيرات...).
+4. استخراج خطة المتابعة (موعد مراجعة، إعادة تحاليل، مراجعة طوارئ إن ذُكرت).
+5. إذا لم يُذكر جزء ما، اجعله "غير مذكور" أو قائمة فارغة حيث يناسب.
+6. الإخراج يجب أن يكون JSON صالح 100% ومتطابق مع الـ schema التالية بدون نص إضافي.
+
+{format_instructions}
+
+النص المفرغ (كلام الطبيب مع المريض):
+--------------------
+{transcript}
+--------------------
+""")
+
+chain = prompt | llm | parser
+
+def build_medical_report(full_transcript: str) -> MedicalReport:
+    return chain.invoke({
+        "transcript": full_transcript,
+        "format_instructions": format_instructions
+    })
+
+# =========================
+# 4) دالة مساعدة لتفريغ الملف
+# =========================
+def transcribe_file_to_text(path: str) -> str:
+    result = model.transcribe(path, language="ar")
+    return result["text"].strip()
+
+# =========================
+# 5) الـ Endpoint الرئيسي
+# =========================
+@app.post("/transcribe-report", response_model=MedicalReport)
+async def transcribe_report(
+    file: UploadFile = File(...),
+    x_api_key: str = Header(None)  # ✅ يقرأ X-API-KEY من الهيدر
+):
+    # ✅ تحقق من API KEY
+    if x_api_key != BACKEND_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing API key")
+
+    # تحقق من نوع الملف
+    if not file.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="الملف يجب أن يكون صوتياً")
+
+    # حفظ الملف مؤقتاً
+    try:
+        suffix = os.path.splitext(file.filename)[1] or ".ogg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            temp_path = tmp.name
+            shutil.copyfileobj(file.file, tmp)
+    except Exception:
+        raise HTTPException(status_code=500, detail="خطأ في حفظ الملف")
+    finally:
+        await file.close()
+
+    try:
+        # 1) تفريغ الصوت إلى نص
+        full_transcript = transcribe_file_to_text(temp_path)
+
+        # 2) بناء التقرير الطبي المنظم
+        report = build_medical_report(full_transcript)
+
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ أثناء المعالجة: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)

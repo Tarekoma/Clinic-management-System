@@ -1,0 +1,29 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest  # <-- اسم الصورة المخصصة
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=n8n-ai.hakim-app.cloud
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_SECURE_COOKIE=false
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://n8n-ai.hakim-app.cloud
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      # SMTP configuration
+      - N8N_SMTP_HOST=mail.crocoit.com
+      - N8N_SMTP_PORT=587
+      - N8N_SMTP_USER=a.moataz@crocoit.com
+      - N8N_SMTP_PASS=;c1dU$?%9d,q0k;S
+      - N8N_SMTP_SENDER_EMAIL=a.moataz@crocoit.com
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
+    external: true

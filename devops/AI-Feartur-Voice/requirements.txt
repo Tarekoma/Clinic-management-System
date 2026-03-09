@@ -1,0 +1,18 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+email-validator
+
+# DB (اختار واحد: psycopg أو psycopg2)
+psycopg[binary]
+psycopg2-binary
+
+# Whisper ASR
+faster-whisper
+torch
+
+# LangChain + Gemini
+langchain-core
+langchain-google-genai
+python-multipart

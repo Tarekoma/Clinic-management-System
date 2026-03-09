@@ -1,0 +1,1305 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Intelligent Medical Assistant API",
+		"description": "API for clinic management and AI-powered medical record processing.\n\nBase URL: http://157.180.10.228:8000\n\nAuthentication:\n1. Call POST /api/v1/auth/login\n2. Copy the access_token from the response\n3. Set it in the collection variable 'access_token'",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://157.180.10.228:8000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@system.com\",\n  \"password\": \"Admin123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"your_refresh_token_here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"current_password\": \"OldPass123!\",\n  \"new_password\": \"NewPass123!\",\n  \"confirm_new_password\": \"NewPass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/change-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "change-password"]
+						}
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "logout"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management - Doctors",
+			"item": [
+				{
+					"name": "Create Doctor",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"dr.ahmed@clinic.com\",\n  \"password\": \"Doctor123!\",\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Hassan\",\n  \"date_of_birth\": \"1985-06-15\",\n  \"gender\": \"male\",\n  \"phone_number\": \"+201234567890\",\n  \"country\": \"Egypt\",\n  \"region\": \"Cairo\",\n  \"city\": \"Cairo\",\n  \"clinic_name\": \"Al Shifa Clinic\",\n  \"specialization\": \"General Medicine\",\n  \"license_number\": \"EG-12345\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/doctors",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "doctors"]
+						}
+					}
+				},
+				{
+					"name": "List Doctors",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/doctors?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "doctors"],
+							"query": [
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Doctor by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/doctors/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "doctors", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Doctor",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"specialization\": \"Cardiology\",\n  \"clinic_name\": \"New Clinic Name\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/doctors/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "doctors", "1"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management - Assistants",
+			"item": [
+				{
+					"name": "Create Assistant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"assistant@clinic.com\",\n  \"password\": \"Assist123!\",\n  \"first_name\": \"Sara\",\n  \"last_name\": \"Ali\",\n  \"phone_number\": \"+201098765432\",\n  \"clinic_name\": \"Al Shifa Clinic\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/assistants",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "assistants"]
+						}
+					}
+				},
+				{
+					"name": "List Assistants",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/assistants?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "assistants"],
+							"query": [
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Assistant by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/assistants/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "assistants", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Assistant",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"Sara\",\n  \"city\": \"Alexandria\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/assistants/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "assistants", "1"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management - Admins",
+			"item": [
+				{
+					"name": "Create Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"newadmin@clinic.com\",\n  \"password\": \"Admin123!\",\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/admins",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "admins"]
+						}
+					}
+				},
+				{
+					"name": "Get Admin by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/admins/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "admins", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Admin",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"Updated\",\n  \"last_name\": \"Admin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/admins/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "admins", "1"]
+						}
+					}
+				},
+				{
+					"name": "List All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/users?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "users"],
+							"query": [
+								{"key": "role", "value": "", "description": "Filter: doctor, assistant, admin"},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Activate or Deactivate User",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/users/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "users", "1", "status"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Clinic - Patients",
+			"item": [
+				{
+					"name": "Create Patient",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"Mohamed\",\n  \"last_name\": \"Salah\",\n  \"date_of_birth\": \"1992-06-15\",\n  \"gender\": \"male\",\n  \"national_id\": \"29206150123456\",\n  \"phone\": \"+201234567890\",\n  \"email\": \"patient@email.com\",\n  \"address\": \"123 Tahrir Square, Cairo\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients"]
+						}
+					}
+				},
+				{
+					"name": "List Patients",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients"],
+							"query": [
+								{"key": "search", "value": "", "description": "Search by name or national ID"},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Patient by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Patient",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"+201111111111\",\n  \"address\": \"New Address\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients", "1"]
+						}
+					}
+				},
+				{
+					"name": "Delete Patient",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients", "1"]
+						}
+					}
+				},
+				{
+					"name": "Assign Condition to Patient",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"condition_id\": 1,\n  \"diagnosed_date\": \"2024-01-15\",\n  \"notes\": \"Mild case, managed with diet\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients/1/conditions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients", "1", "conditions"]
+						}
+					}
+				},
+				{
+					"name": "Remove Condition from Patient",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/patients/1/conditions/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "patients", "1", "conditions", "1"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Clinic - Conditions Catalog",
+			"item": [
+				{
+					"name": "Create Condition",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Type 2 Diabetes Mellitus\",\n  \"category\": \"chronic\",\n  \"description\": \"Metabolic disorder characterized by high blood sugar\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/conditions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "conditions"]
+						}
+					}
+				},
+				{
+					"name": "List Conditions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/conditions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "conditions"],
+							"query": [
+								{"key": "search", "value": "", "description": "Search by condition name"}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Clinic - Appointment Types",
+			"item": [
+				{
+					"name": "Create Appointment Type",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Initial Consultation\",\n  \"description\": \"First visit with the doctor\",\n  \"duration_minutes\": 30,\n  \"default_fee\": 200\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointment-types",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointment-types"]
+						}
+					}
+				},
+				{
+					"name": "List Appointment Types",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointment-types",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointment-types"],
+							"query": [
+								{"key": "doctor_id", "value": "", "description": "Filter by doctor ID"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Appointment Type",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"duration_minutes\": 45,\n  \"default_fee\": 250\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointment-types/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointment-types", "1"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Clinic - Appointments",
+			"item": [
+				{
+					"name": "Schedule Appointment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"patient_id\": 1,\n  \"doctor_id\": 1,\n  \"appointment_type_id\": 1,\n  \"start_time\": \"2026-03-01T10:00:00+02:00\",\n  \"reason\": \"Annual checkup\",\n  \"is_urgent\": false,\n  \"is_paid\": false,\n  \"fee\": 200\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointments"]
+						}
+					}
+				},
+				{
+					"name": "List Appointments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointments?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointments"],
+							"query": [
+								{"key": "doctor_id", "value": ""},
+								{"key": "patient_id", "value": ""},
+								{"key": "status", "value": "", "description": "SCHEDULED, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW"},
+								{"key": "date_from", "value": ""},
+								{"key": "date_to", "value": ""},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Appointment by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointments/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointments", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Appointment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2026-03-02T11:00:00+02:00\",\n  \"reason\": \"Updated reason\",\n  \"is_paid\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointments/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointments", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Appointment Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"CONFIRMED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/appointments/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "appointments", "1", "status"]
+						}
+					}
+				},
+				{
+					"name": "Check Doctor Availability",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/doctors/1/availability?appointment_datetime=2026-03-01T10:00:00%2B02:00&duration_minutes=30",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "doctors", "1", "availability"],
+							"query": [
+								{"key": "appointment_datetime", "value": "2026-03-01T10:00:00+02:00"},
+								{"key": "duration_minutes", "value": "30"}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Clinic - Visits",
+			"item": [
+				{
+					"name": "Start Visit (Check-in)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"appointment_id\": 1,\n  \"chief_complaint\": \"Patient complains of chest pain\",\n  \"blood_pressure\": \"120/80\",\n  \"heart_rate\": 75,\n  \"temperature\": 37.0,\n  \"weight\": 80,\n  \"height\": 175,\n  \"notes\": \"Patient arrived on time\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/visits",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "visits"]
+						}
+					}
+				},
+				{
+					"name": "List Visits",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/visits?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "visits"],
+							"query": [
+								{"key": "doctor_id", "value": ""},
+								{"key": "patient_id", "value": ""},
+								{"key": "status", "value": "", "description": "WAITING, IN_PROGRESS, COMPLETED, CANCELLED"},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Visit by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/visits/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "visits", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Visit",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chief_complaint\": \"Updated complaint\",\n  \"blood_pressure\": \"130/85\",\n  \"notes\": \"Doctor updated notes\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/visits/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "visits", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Visit Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"COMPLETED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/clinic/visits/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "clinic", "visits", "1", "status"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Medical Reports",
+			"item": [
+				{
+					"name": "Create Report Manually",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ai_diagnosis\": \"Hypertension Stage 1\",\n  \"ai_medications\": [\n    {\n      \"name\": \"Amlodipine\",\n      \"dose\": \"5mg\",\n      \"frequency\": \"once daily\",\n      \"duration\": \"30 days\",\n      \"route\": \"oral\",\n      \"notes\": \"Take in the morning\"\n    }\n  ],\n  \"ai_recommendations\": [\"Reduce salt intake\", \"Exercise 30min daily\"],\n  \"ai_follow_up\": \"Follow up in 2 weeks\",\n  \"doctor_notes\": \"Patient is responding well\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports"]
+						}
+					}
+				},
+				{
+					"name": "Process Voice Recording (AI)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "visit_id",
+									"value": "1",
+									"type": "text"
+								},
+								{
+									"key": "audio_file",
+									"type": "file",
+									"src": "",
+									"description": "WAV, MP3, or M4A file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/transcribe",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "transcribe"]
+						}
+					}
+				},
+				{
+					"name": "List Medical Reports",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports"],
+							"query": [
+								{"key": "visit_id", "value": ""},
+								{"key": "patient_id", "value": ""},
+								{"key": "doctor_id", "value": ""},
+								{"key": "status", "value": "", "description": "draft, confirmed, reviewed, cancelled, approved, finalized"},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Medical Report by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Medical Report",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"doctor_notes\": \"Updated notes after review\",\n  \"ai_follow_up\": \"Follow up in 1 week\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports", "1"]
+						}
+					}
+				},
+				{
+					"name": "Update Report Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"approved\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports", "1", "status"]
+						}
+					}
+				},
+				{
+					"name": "Finalize Report",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-reports/1/finalize",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-reports", "1", "finalize"]
+						}
+					}
+				},
+				{
+					"name": "Upload Medical Image (AI)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{"key": "visit_id", "value": "1", "type": "text"},
+								{"key": "image_type", "value": "xray", "type": "text", "description": "xray or skin"},
+								{"key": "description", "value": "Chest X-Ray", "type": "text"},
+								{"key": "image_file", "type": "file", "src": "", "description": "JPEG or PNG"}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-images",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-images"]
+						}
+					}
+				},
+				{
+					"name": "Get Medical Image by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/medical-images/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "medical-images", "1"]
+						}
+					}
+				},
+				{
+					"name": "List Visit Images",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/visits/1/medical-images",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "visits", "1", "medical-images"]
+						}
+					}
+				},
+				{
+					"name": "Upload Lab Report (AI)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{"key": "visit_id", "value": "1", "type": "text"},
+								{"key": "test_name", "value": "Complete Blood Count (CBC)", "type": "text"},
+								{"key": "lab_name", "value": "Cairo Lab", "type": "text"},
+								{"key": "report_file", "type": "file", "src": "", "description": "PDF file"}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/lab-reports",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "lab-reports"]
+						}
+					}
+				},
+				{
+					"name": "Get Lab Report by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/lab-reports/1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "lab-reports", "1"]
+						}
+					}
+				},
+				{
+					"name": "List Visit Lab Reports",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/visits/1/lab-reports",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "visits", "1", "lab-reports"]
+						}
+					}
+				},
+				{
+					"name": "Get Audit Logs (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reports/audit-logs?skip=0&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reports", "audit-logs"],
+							"query": [
+								{"key": "user_id", "value": ""},
+								{"key": "action", "value": ""},
+								{"key": "entity_type", "value": ""},
+								{"key": "entity_id", "value": ""},
+								{"key": "date_from", "value": ""},
+								{"key": "date_to", "value": ""},
+								{"key": "skip", "value": "0"},
+								{"key": "limit", "value": "100"}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Root",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						}
+					}
+				},
+				{
+					"name": "Health",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
+				}
+			]
+		}
+	]
+}

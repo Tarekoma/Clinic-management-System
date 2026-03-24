@@ -12,5 +12,5 @@ import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
 /// The single source of truth for all doctor-side state.
 final doctorViewModelProvider =
     StateNotifierProvider<DoctorViewModel, DoctorState>(
-  (ref) => DoctorViewModel(),
-);
+      (ref) => DoctorViewModel(),
+    );

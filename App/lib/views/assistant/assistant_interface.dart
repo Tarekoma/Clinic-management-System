@@ -16,6 +16,7 @@ import 'assistant_dashboard.dart';
 import 'assistant_appointments_page.dart';
 import 'assistant_patients_page.dart';
 import 'assistant_payments_page.dart';
+import 'assistant_settings_page.dart';
 
 typedef _T = AssistantTheme;
 
@@ -159,9 +160,11 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
             ),
             _buildDoctorSwitch(state.doctors, state.activeDoctor),
             IconButton(
-              onPressed: _confirmLogout,
-              icon: const Icon(Icons.logout_rounded, size: 20),
-              color: Colors.white.withOpacity(0.75),
+              onPressed: () =>
+                  showAssistantSettings(context, widget.assistantProfile),
+              icon: const Icon(Icons.settings_rounded, size: 20),
+              color: Colors.white.withOpacity(0.85),
+              tooltip: 'Settings',
             ),
           ],
         ),

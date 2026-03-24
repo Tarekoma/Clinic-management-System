@@ -27,10 +27,10 @@ class DoctorPatCard extends StatelessWidget {
     if (dob == null) return null;
     try {
       return ((DateTime.now()
-                      .difference(DateTime.parse(dob.toString()))
-                      .inDays) /
-                  365.25)
-              .floor();
+                  .difference(DateTime.parse(dob.toString()))
+                  .inDays) /
+              365.25)
+          .floor();
     } catch (_) {
       return null;
     }
@@ -39,9 +39,9 @@ class DoctorPatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gender = (patient['gender'] ?? '').toString().toUpperCase();
-    final phone  = patient['phone'] ?? '';
-    final age    = _age;
-    final conds  = (patient['conditions'] as List?)?.cast<Map>() ?? [];
+    final phone = patient['phone'] ?? '';
+    final age = _age;
+    final conds = (patient['conditions'] as List?)?.cast<Map>() ?? [];
 
     return GestureDetector(
       onTap: onTap,
@@ -96,10 +96,7 @@ class DoctorPatCard extends StatelessWidget {
                         const SizedBox(width: 3),
                         Text(
                           gender == 'MALE' ? 'Male' : 'Female',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _T.textS,
-                          ),
+                          style: const TextStyle(fontSize: 11, color: _T.textS),
                         ),
                         if (phone.isNotEmpty)
                           const Text(
@@ -130,7 +127,9 @@ class DoctorPatCard extends StatelessWidget {
                           .map(
                             (c) => Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: _T.urgentBg,
                                 borderRadius: BorderRadius.circular(4),
@@ -150,8 +149,9 @@ class DoctorPatCard extends StatelessWidget {
                   ],
                   Builder(
                     builder: (_) {
-                      final diseases =
-                          List<String>.from(patient['chronic_diseases'] ?? []);
+                      final diseases = List<String>.from(
+                        patient['chronic_diseases'] ?? [],
+                      );
                       if (diseases.isEmpty) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -162,7 +162,9 @@ class DoctorPatCard extends StatelessWidget {
                               .map(
                                 (d) => Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2),
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF3E5F5),
                                     borderRadius: BorderRadius.circular(4),

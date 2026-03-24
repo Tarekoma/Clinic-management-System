@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "M:/My CV/Hakim/windows"
+    "cmake.sourceDirectory": "J:/Hakim/windows",
+    "terminal.integrated.cwd": "J:/Hakim/App"
 }

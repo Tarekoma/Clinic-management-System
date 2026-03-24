@@ -177,6 +177,7 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              const SizedBox(height: 8),
               Center(
                 child: Container(
                   width: 40,

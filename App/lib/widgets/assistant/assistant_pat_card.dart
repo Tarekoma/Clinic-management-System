@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'assistant_shared_widgets.dart';
 
-typedef _T      = AssistantTheme;
+typedef _T = AssistantTheme;
 typedef _Avatar = AssistantAvatar;
 
 class AssistantPatCard extends StatelessWidget {
@@ -32,17 +32,16 @@ class AssistantPatCard extends StatelessWidget {
     if (dob == null) return null;
     try {
       return ((DateTime.now()
-                      .difference(DateTime.parse(dob.toString()))
-                      .inDays) /
-                  365.25)
-              .floor();
+                  .difference(DateTime.parse(dob.toString()))
+                  .inDays) /
+              365.25)
+          .floor();
     } catch (_) {
       return null;
     }
   }
 
-  PopupMenuItem<String> _menuItem(
-          IconData icon, String label, Color color) =>
+  PopupMenuItem<String> _menuItem(IconData icon, String label, Color color) =>
       PopupMenuItem<String>(
         value: label,
         child: Row(
@@ -56,10 +55,11 @@ class AssistantPatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gender  = (patient['gender'] ?? '').toString().toUpperCase();
-    final phone   = patient['phone'] ?? '';
-    final age     = _age;
-    final conds   = (patient['conditions'] as List?)
+    final gender = (patient['gender'] ?? '').toString().toUpperCase();
+    final phone = patient['phone'] ?? '';
+    final age = _age;
+    final conds =
+        (patient['conditions'] as List?)
             ?.map(
               (c) =>
                   (c['condition'] as Map? ?? {})['name']?.toString() ??
@@ -125,8 +125,7 @@ class AssistantPatCard extends StatelessWidget {
                         const SizedBox(width: 3),
                         Text(
                           gender == 'MALE' ? 'Male' : 'Female',
-                          style:
-                              const TextStyle(fontSize: 11, color: _T.textS),
+                          style: const TextStyle(fontSize: 11, color: _T.textS),
                         ),
                         if (phone.isNotEmpty)
                           const Text(
@@ -138,44 +137,46 @@ class AssistantPatCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             phone,
-                            style:
-                                const TextStyle(fontSize: 11, color: _T.textS),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _T.textS,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                     ],
                   ),
                   // Chronic conditions
-                  if (conds.isNotEmpty ||
-                      chronic.toString().isNotEmpty) ...[
+                  if (conds.isNotEmpty || chronic.toString().isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: (conds.isNotEmpty
-                              ? conds.take(3)
-                              : [chronic.toString()])
-                          .map(
-                            (c) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _T.urgentBg,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                c,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: _T.urgent,
+                      children:
+                          (conds.isNotEmpty
+                                  ? conds.take(3)
+                                  : [chronic.toString()])
+                              .map(
+                                (c) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _T.urgentBg,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    c,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: _T.urgent,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          )
-                          .toList(),
+                              )
+                              .toList(),
                     ),
                   ],
                 ],
@@ -194,8 +195,7 @@ class AssistantPatCard extends StatelessWidget {
               itemBuilder: (_) => [
                 _menuItem(Icons.info_outline_rounded, 'View', _T.info),
                 _menuItem(Icons.edit_rounded, 'Edit', _T.green),
-                _menuItem(
-                    Icons.delete_outline_rounded, 'Delete', _T.urgent),
+                _menuItem(Icons.delete_outline_rounded, 'Delete', _T.urgent),
               ],
               onSelected: (v) {
                 if (v == 'View') onTap();

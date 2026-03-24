@@ -114,6 +114,7 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => ScaffoldMessenger(
         child: AssistantApptForm(
+          preSelectedPatient: patient,
           patients: state.patients,
           activeDoctorId: state.activeDoctor != null
               ? int.tryParse(state.activeDoctor!['id'].toString())

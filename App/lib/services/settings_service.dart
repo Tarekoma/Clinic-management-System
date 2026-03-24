@@ -35,8 +35,34 @@ class SettingsService {
     await prefs.setDouble(_keyRevisitFee, fee);
   }
 
-  // ── Load both at once (used in form initState) ───────────────────────────────
+  // ── Generic helpers (used by settings page) ─────────────────────────────────
 
+  static Future<void> setBool(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
+
+  static Future<void> setString(String key, String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
+  }
+
+  /// Loads all app-level preferences in one shot.
+  /// Used by DoctorSettingsPage on open so it can populate all toggles.
+  static Future<Map<String, dynamic>> loadAllPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'consultation': prefs.getDouble(_keyConsultFee) ?? 200.0,
+      'revisit': prefs.getDouble(_keyRevisitFee) ?? 100.0,
+      'notif_appointments': prefs.getBool('notif_appointments') ?? true,
+      'notif_urgent': prefs.getBool('notif_urgent') ?? true,
+      'notif_daily_summary': prefs.getBool('notif_daily_summary') ?? false,
+      'language': prefs.getString('language') ?? 'English',
+      'dark_mode': prefs.getBool('dark_mode') ?? false,
+    };
+  }
+
+  // ── Load both at once (used in form initState) ─────────────────────────────
   static Future<Map<String, double>> loadFeeDefaults() async {
     final prefs = await SharedPreferences.getInstance();
     return {

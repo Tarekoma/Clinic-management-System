@@ -15,7 +15,6 @@ import 'package:Hakim/viewmodels/auth_viewmodel.dart';
 /// Usage in views:
 ///   final state = ref.watch(authProvider);
 ///   final vm    = ref.read(authProvider.notifier);
-final authProvider =
-    StateNotifierProvider<AuthViewModel, AuthState>(
+final authProvider = StateNotifierProvider<AuthViewModel, AuthState>(
   (ref) => AuthViewModel(),
 );

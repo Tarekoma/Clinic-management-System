@@ -1,5 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/views/doctor/doctor_appointments_page.dart
+//
+// CHANGE: "Done" (onStatus) removed from card actions.
+//         "Details" (onDetails) added — opens DoctorApptDetailsSheet with
+//         full patient information for the selected appointment.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -10,6 +14,7 @@ import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 import 'package:Hakim/widgets/doctor/doctor_appt_card.dart';
 import 'package:Hakim/widgets/doctor/doctor_appt_form.dart';
+import 'package:Hakim/widgets/doctor/doctor_appt_details_sheet.dart'; // ← NEW
 import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
 
 typedef _T = DoctorTheme;
@@ -40,6 +45,8 @@ class _DoctorAppointmentsPageState
     super.dispose();
   }
 
+  // ── Snack helper ──────────────────────────────────────────────────────────
+
   void _snack(String msg, {bool err = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -52,6 +59,8 @@ class _DoctorAppointmentsPageState
       ),
     );
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +84,7 @@ class _DoctorAppointmentsPageState
       ),
       body: Column(
         children: [
-          // ── Search ───────────────────────────────────────────────────────
+          // ── Search ────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: TextField(
@@ -100,7 +109,7 @@ class _DoctorAppointmentsPageState
               onChanged: vm.setApptSearch,
             ),
           ),
-          // ── Filter chips ─────────────────────────────────────────────────
+          // ── Filter chips ──────────────────────────────────────────────────
           SizedBox(
             height: 52,
             child: ListView(
@@ -118,18 +127,20 @@ class _DoctorAppointmentsPageState
               ],
             ),
           ),
-          // ── List ─────────────────────────────────────────────────────────
+          // ── List ──────────────────────────────────────────────────────────
           Expanded(
             child: RefreshIndicator(
               onRefresh: vm.fetchAppointments,
               color: _T.navy,
-              child: _buildList(loading, list, vm),
+              child: _buildList(loading, list, vm, state),
             ),
           ),
         ],
       ),
     );
   }
+
+  // ── Filter chip ───────────────────────────────────────────────────────────
 
   Widget _buildChip(DoctorApptFilter f, String lbl, DoctorViewModel vm) {
     final sel = _filter == f;
@@ -188,10 +199,13 @@ class _DoctorAppointmentsPageState
     );
   }
 
+  // ── Appointment list ──────────────────────────────────────────────────────
+
   Widget _buildList(
     bool loading,
     List<Map<String, dynamic>> list,
     DoctorViewModel vm,
+    DoctorState state,
   ) {
     if (loading) {
       return const Center(
@@ -209,35 +223,52 @@ class _DoctorAppointmentsPageState
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
       itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (ctx, i) => GestureDetector(
-        onTap: () {
-          final s = (list[i]['status'] ?? '').toUpperCase();
-          if (s == 'SCHEDULED' || s == 'IN_PROGRESS') {
-            widget.onStartConsultation(list[i]);
-          }
-        },
-        child: DoctorApptCard(
-          appt: list[i],
-          onStart: () => widget.onStartConsultation(list[i]),
-          onEdit: () => _showForm(ctx, list[i]),
-          onStatus: (s) => _setStatus(list[i], s, vm),
-          onDelete: () => _delete(list[i], vm),
-        ),
-      ),
+      itemBuilder: (ctx, i) {
+        final appt = list[i];
+        final s = (appt['status'] ?? '').toUpperCase();
+        return GestureDetector(
+          onTap: () {
+            if (s == 'SCHEDULED' || s == 'IN_PROGRESS') {
+              widget.onStartConsultation(appt);
+            }
+          },
+          child: DoctorApptCard(
+            appt: appt,
+            onStart: () => widget.onStartConsultation(appt),
+            onEdit: () => _showForm(ctx, appt),
+            // ── Details: look up the full patient record from state, then
+            //    open the sheet.  Falls back gracefully when not found.
+            onDetails: () => _showDetails(appt, state),
+            onDelete: () => _delete(appt, vm),
+          ),
+        );
+      },
     );
   }
 
-  Future<void> _setStatus(
-    Map<String, dynamic> a,
-    String status,
-    DoctorViewModel vm,
-  ) async {
-    try {
-      await vm.updateAppointmentStatus(int.parse(a['id'].toString()), status);
-    } catch (e) {
-      _snack(DoctorViewModel.extractError(e), err: true);
+  // ── Open details sheet ────────────────────────────────────────────────────
+
+  void _showDetails(Map<String, dynamic> appt, DoctorState state) {
+    // Resolve the richer patient record from the patients list using the id
+    // carried inside the appointment map.
+    final patientId = appt['patient_id'] ?? appt['patient']?['id'];
+
+    Map<String, dynamic>? patient;
+    if (patientId != null) {
+      try {
+        patient = state.patients.firstWhere(
+          (p) => p['id'].toString() == patientId.toString(),
+        );
+      } catch (_) {
+        // Patient not in local cache — sheet still shows appointment data.
+        patient = null;
+      }
     }
+
+    showAppointmentDetails(context: context, appt: appt, patient: patient);
   }
+
+  // ── Delete appointment ────────────────────────────────────────────────────
 
   Future<void> _delete(Map<String, dynamic> a, DoctorViewModel vm) async {
     final name = vm.apptName(a);
@@ -271,6 +302,8 @@ class _DoctorAppointmentsPageState
     }
   }
 
+  // ── Create / edit form ────────────────────────────────────────────────────
+
   Future<void> _showForm(
     BuildContext context,
     Map<String, dynamic>? existing,
@@ -278,8 +311,7 @@ class _DoctorAppointmentsPageState
     final state = ref.read(doctorViewModelProvider);
     final vm = ref.read(doctorViewModelProvider.notifier);
     final isNew = existing == null;
-    // FIX: removed ScaffoldMessenger wrapper (no Scaffold descendant = crash).
-    // Form pops with true on success so we can switch the filter here.
+
     final created = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -296,9 +328,6 @@ class _DoctorAppointmentsPageState
     );
     if (isNew && created == true && mounted) {
       _snack('Appointment booked successfully!');
-      // Use All — no date/status filtering, guaranteed to show every appointment.
-      // Upcoming hides appointments once their start_time passes, so a test
-      // appointment booked 1 minute in the future disappears almost immediately.
       setState(() => _filter = DoctorApptFilter.all);
     }
   }

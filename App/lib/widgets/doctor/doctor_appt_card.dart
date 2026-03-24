@@ -2,6 +2,9 @@
 // lib/widgets/doctor/doctor_appt_card.dart
 //
 // DoctorApptCard, DoctorMiniChip, DoctorActBtn
+//
+// CHANGE: Removed `onStatus` / "Done" button.
+//         Added `onDetails` / "Details" button that opens patient info sheet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -17,17 +20,24 @@ extension _StrExt on String {
 
 class DoctorApptCard extends StatelessWidget {
   final Map<String, dynamic> appt;
-  final VoidCallback onStart, onEdit, onDelete;
-  final void Function(String) onStatus;
+  final VoidCallback onStart;
+  final VoidCallback onEdit;
+
+  /// Opens the patient-information bottom sheet.
+  final VoidCallback onDetails;
+
+  final VoidCallback onDelete;
 
   const DoctorApptCard({
     required this.appt,
     required this.onStart,
     required this.onEdit,
+    required this.onDetails, // ← replaces onStatus
     required this.onDelete,
-    required this.onStatus,
     Key? key,
   }) : super(key: key);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   DateTime? _dt(dynamic v) {
     if (v == null) return null;
@@ -39,19 +49,25 @@ class DoctorApptCard extends StatelessWidget {
   }
 
   String get _name {
-    final fn = appt['patient_first_name'] ?? appt['patient']?['first_name'] ?? '';
-    final ln = appt['patient_last_name']  ?? appt['patient']?['last_name']  ?? '';
+    final fn =
+        appt['patient_first_name'] ?? appt['patient']?['first_name'] ?? '';
+    final ln = appt['patient_last_name'] ?? appt['patient']?['last_name'] ?? '';
     return '$fn $ln'.trim().ifEmpty('Unknown Patient');
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final dt     = _dt(appt['start_time']);
+    final dt = _dt(appt['start_time']);
     final status = (appt['status'] ?? 'SCHEDULED').toUpperCase();
     final urgent = appt['is_urgent'] == true;
-    final type   = appt['appointment_type_name'] ?? appt['appointment_type'] ?? 'Consultation';
-    final phone  = appt['patient_phone'] ?? appt['patient']?['phone'] ?? '';
-    final fee    = double.tryParse((appt['fee'] ?? 0).toString()) ?? 0.0;
+    final type =
+        appt['appointment_type_name'] ??
+        appt['appointment_type'] ??
+        'Consultation';
+    final phone = appt['patient_phone'] ?? appt['patient']?['phone'] ?? '';
+    final fee = double.tryParse((appt['fee'] ?? 0).toString()) ?? 0.0;
     final isPaid = appt['is_paid'] == true;
     final canStart = status == 'SCHEDULED' || status == 'IN_PROGRESS';
 
@@ -193,11 +209,11 @@ class DoctorApptCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: const BoxDecoration(
               color: _T.bgInput,
-              borderRadius:
-                  BorderRadius.vertical(bottom: Radius.circular(14)),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(14)),
             ),
             child: Row(
               children: [
+                // Date label
                 if (dt != null) ...[
                   const Icon(
                     Icons.calendar_today_rounded,
@@ -219,6 +235,7 @@ class DoctorApptCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(width: 8),
+                // Action buttons
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
@@ -237,13 +254,13 @@ class DoctorApptCard extends StatelessWidget {
                       color: _T.navyLight,
                       onTap: onEdit,
                     ),
-                    if (status == 'SCHEDULED')
-                      DoctorActBtn(
-                        label: 'Done',
-                        icon: Icons.check_circle_outline_rounded,
-                        color: _T.success,
-                        onTap: () => onStatus('COMPLETED'),
-                      ),
+                    // ── "Details" replaces the old "Done" button ──────────
+                    DoctorActBtn(
+                      label: 'Details',
+                      icon: Icons.person_outline_rounded,
+                      color: _T.navy,
+                      onTap: onDetails,
+                    ),
                     DoctorActBtn(
                       label: 'Delete',
                       icon: Icons.delete_outline_rounded,
@@ -276,20 +293,20 @@ class DoctorMiniChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: _T.bgInput,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 10, color: color)),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: _T.bgInput,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 10, color: color)),
+      ],
+    ),
+  );
 }
 
 // ── Action Button ─────────────────────────────────────────────────────────────
@@ -309,25 +326,25 @@ class DoctorActBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 13, color: color),
-              const SizedBox(width: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(6),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 }

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.hakeem"
+    namespace = "com.example.hakim"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,26 +20,21 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.hakeem"
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.hakim"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        
-        // ✅ Reduce APK size: Only keep English and Arabic resources
-        resourceConfigurations.addAll(listOf("en", "ar"))
     }
 
     buildTypes {
         release {
-            // ✅ FIXED: Proper Kotlin syntax
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 }

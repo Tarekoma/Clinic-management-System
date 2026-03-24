@@ -258,6 +258,18 @@ class ApiService {
     await clearUserProfile(); // ← also wipe the saved profile
   }
 
+  /// Changes the authenticated user's password.
+  /// Backend: POST /api/v1/auth/change-password
+  static Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _dio.post(
+      '/api/v1/auth/change-password',
+      data: {'old_password': oldPassword, 'new_password': newPassword},
+    );
+  }
+
   // ─────────────────────────────────────────────
   // PATIENTS
   // ─────────────────────────────────────────────

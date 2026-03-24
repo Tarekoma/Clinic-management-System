@@ -8,6 +8,7 @@
 
 import 'package:Hakim/views/auths/login_page.dart';
 import 'package:Hakim/views/doctor/consultation/consultation_page.dart';
+import 'package:Hakim/views/doctor/doctor_pages/doctor_settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,10 +181,11 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                 ],
               ),
               IconButton(
-                onPressed: _confirmLogout,
-                icon: const Icon(Icons.logout_rounded, size: 20),
-                color: Colors.white.withOpacity(0.75),
-                tooltip: 'Sign Out',
+                onPressed: () =>
+                    showDoctorSettings(context, widget.doctorProfile),
+                icon: const Icon(Icons.settings_rounded, size: 20),
+                color: Colors.white.withOpacity(0.85),
+                tooltip: 'Settings',
               ),
             ],
           ),

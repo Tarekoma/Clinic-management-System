@@ -11,6 +11,7 @@ import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 import 'package:Hakim/widgets/doctor/doctor_pat_card.dart';
 import 'package:Hakim/widgets/doctor/doctor_pat_form.dart';
+import 'package:Hakim/widgets/doctor/doctor_appt_form.dart';
 import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
 
 typedef _T = DoctorTheme;
@@ -177,18 +178,54 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
     );
   }
 
-  void _showAddSheet(BuildContext context, DoctorViewModel vm) {
-    showModalBottomSheet(
+  Future<void> _showAddSheet(BuildContext context, DoctorViewModel vm) async {
+    final created = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      // FIX: removed ScaffoldMessenger wrapper — no Scaffold descendant
       builder: (_) => DoctorPatForm(
         onSubmit: (data, {existingId}) =>
             vm.createOrUpdatePatient(data, existingId: existingId),
         snack: _snack,
       ),
     );
+
+    // Patient was successfully created → open appointment form pre-filled
+    if (created == true && mounted) {
+      final state = ref.read(doctorViewModelProvider);
+      final newPatient = state.lastCreatedPatient;
+      vm.clearLastCreatedPatient();
+      if (newPatient != null) {
+        await _showApptSheet(vm, newPatient);
+      }
+    }
+  }
+
+  /// Opens the appointment form with [preSelectedPatient] locked in.
+  /// The patient search field is read-only — no searching needed.
+  Future<void> _showApptSheet(
+    DoctorViewModel vm,
+    Map<String, dynamic> preSelectedPatient,
+  ) async {
+    if (!mounted) return;
+    final state = ref.read(doctorViewModelProvider);
+    final booked = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DoctorApptForm(
+        preSelectedPatient: preSelectedPatient,
+        patients: state.patients,
+        types: state.appointmentTypes,
+        doctorId: int.parse(widget.doctorProfile.id),
+        onSubmit: (data, {existingId}) =>
+            vm.createOrUpdateAppointment(data, existingId: existingId),
+        snack: _snack,
+      ),
+    );
+    if (booked == true && mounted) {
+      _snack('Appointment booked successfully!');
+    }
   }
 
   void _showEditSheet(Map<String, dynamic> patient, DoctorViewModel vm) {

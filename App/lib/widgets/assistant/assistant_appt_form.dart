@@ -29,8 +29,13 @@ class AssistantApptForm extends StatefulWidget {
   onSubmit;
   final String Function(Map<String, dynamic>) patName;
 
+  /// When set (new appointment opened from the patients page), the patient
+  /// field is pre-filled and locked — no search required.
+  final Map<String, dynamic>? preSelectedPatient;
+
   const AssistantApptForm({
     this.existing,
+    this.preSelectedPatient,
     required this.patients,
     this.activeDoctorId,
     required this.appointmentTypes,
@@ -102,6 +107,10 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
     }
 
     final e = widget.existing;
+    // Pre-select patient when launched from the patients page (new appt flow).
+    if (widget.preSelectedPatient != null && e == null) {
+      _selPatient = widget.preSelectedPatient;
+    }
     if (e != null) {
       final pid = (e['patient_id'] ?? e['patient']?['id'] ?? '').toString();
       _selPatient = widget.patients
@@ -341,6 +350,8 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
               patients: widget.patients,
               patName: widget.patName,
               selectedPatient: _selPatient,
+              locked:
+                  widget.preSelectedPatient != null && widget.existing == null,
               onSelected: (p) => setState(() => _selPatient = p),
             ),
             const SizedBox(height: 14),
@@ -608,11 +619,15 @@ class _AssistantPatientSearchField extends StatefulWidget {
   final Map<String, dynamic>? selectedPatient;
   final void Function(Map<String, dynamic>?) onSelected;
 
+  /// When true the field is read-only (patient was pre-selected).
+  final bool locked;
+
   const _AssistantPatientSearchField({
     required this.patients,
     required this.patName,
     required this.selectedPatient,
     required this.onSelected,
+    this.locked = false,
     Key? key,
   }) : super(key: key);
 
@@ -703,6 +718,7 @@ class _AssistantPatientSearchFieldState
       children: [
         TextField(
           controller: _ctrl,
+          readOnly: widget.locked,
           decoration: _T.inp(
             'Search patient by name, phone or ID...',
             pre: const Icon(
@@ -710,14 +726,14 @@ class _AssistantPatientSearchFieldState
               size: 18,
               color: _T.textM,
             ),
-            suf: _ctrl.text.isNotEmpty
+            suf: (!widget.locked && _ctrl.text.isNotEmpty)
                 ? IconButton(
                     icon: const Icon(Icons.clear_rounded, size: 18),
                     onPressed: _clear,
                   )
                 : null,
           ),
-          onChanged: _search,
+          onChanged: widget.locked ? null : _search,
         ),
 
         // ── Selected chip ──────────────────────────────────────────────

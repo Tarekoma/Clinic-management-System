@@ -10,9 +10,9 @@ import 'package:intl/intl.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'assistant_shared_widgets.dart';
 
-typedef _T          = AssistantTheme;
-typedef _Avatar     = AssistantAvatar;
-typedef _Badge      = AssistantBadge;
+typedef _T = AssistantTheme;
+typedef _Avatar = AssistantAvatar;
+typedef _Badge = AssistantBadge;
 typedef _SectionHead = AssistantSectionHead;
 
 class AssistantPatientDetail extends StatelessWidget {
@@ -35,10 +35,10 @@ class AssistantPatientDetail extends StatelessWidget {
     if (dob == null) return null;
     try {
       return ((DateTime.now()
-                      .difference(DateTime.parse(dob.toString()))
-                      .inDays) /
-                  365.25)
-              .floor();
+                  .difference(DateTime.parse(dob.toString()))
+                  .inDays) /
+              365.25)
+          .floor();
     } catch (_) {
       return null;
     }
@@ -69,7 +69,8 @@ class AssistantPatientDetail extends StatelessWidget {
   }
 
   String get _conditionsText {
-    final list = (patient['conditions'] as List?)
+    final list =
+        (patient['conditions'] as List?)
             ?.map(
               (c) =>
                   (c['condition'] as Map? ?? {})['name']?.toString() ??
@@ -84,8 +85,8 @@ class AssistantPatientDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final age        = _age;
-    final gender     = (patient['gender'] ?? '').toString().toUpperCase();
+    final age = _age;
+    final gender = (patient['gender'] ?? '').toString().toUpperCase();
     final hasChronic = _conditionsText.isNotEmpty;
 
     return Dialog.fullscreen(
@@ -103,8 +104,10 @@ class AssistantPatientDetail extends StatelessWidget {
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded,
-                            color: Colors.white70),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white70,
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                       _Avatar(name: _name, size: 48),
@@ -141,7 +144,9 @@ class AssistantPatientDetail extends StatelessWidget {
                               const SizedBox(height: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 3),
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: _T.urgent,
                                   borderRadius: BorderRadius.circular(12),
@@ -160,8 +165,10 @@ class AssistantPatientDetail extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.edit_rounded,
-                            color: Colors.white),
+                        icon: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white,
+                        ),
                         onPressed: () {
                           Navigator.pop(context);
                           onEdit();
@@ -186,14 +193,26 @@ class AssistantPatientDetail extends StatelessWidget {
                       title: 'Patient Information',
                       color: _T.green,
                       rows: [
-                        _patRow(Icons.badge_outlined, 'ID',
-                            patient['id'].toString()),
-                        _patRow(Icons.phone_rounded, 'Phone',
-                            patient['phone'] ?? 'N/A'),
-                        _patRow(Icons.email_rounded, 'Email',
-                            patient['email'] ?? 'N/A'),
-                        _patRow(Icons.wc_rounded, 'Gender',
-                            patient['gender'] ?? 'N/A'),
+                        _patRow(
+                          Icons.badge_outlined,
+                          'ID',
+                          patient['id'].toString(),
+                        ),
+                        _patRow(
+                          Icons.phone_rounded,
+                          'Phone',
+                          patient['phone'] ?? 'N/A',
+                        ),
+                        _patRow(
+                          Icons.email_rounded,
+                          'Email',
+                          patient['email'] ?? 'N/A',
+                        ),
+                        _patRow(
+                          Icons.wc_rounded,
+                          'Gender',
+                          patient['gender'] ?? 'N/A',
+                        ),
                         _patRow(
                           Icons.cake_rounded,
                           'Date of Birth',
@@ -201,10 +220,16 @@ class AssistantPatientDetail extends StatelessWidget {
                               patient['birth_date'] ??
                               'N/A',
                         ),
-                        _patRow(Icons.location_on_outlined, 'Address',
-                            patient['address'] ?? 'N/A'),
-                        _patRow(Icons.fingerprint_rounded, 'National ID',
-                            patient['national_id'] ?? 'N/A'),
+                        _patRow(
+                          Icons.location_on_outlined,
+                          'Address',
+                          patient['address'] ?? 'N/A',
+                        ),
+                        _patRow(
+                          Icons.fingerprint_rounded,
+                          'National ID',
+                          patient['national_id'] ?? 'N/A',
+                        ),
                       ],
                     ),
 
@@ -243,7 +268,7 @@ class AssistantPatientDetail extends StatelessWidget {
                       )
                     else
                       ..._appts.take(5).map((a) {
-                        final dt     = _dt(a['start_time']);
+                        final dt = _dt(a['start_time']);
                         final status = (a['status'] ?? '').toUpperCase();
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -251,17 +276,23 @@ class AssistantPatientDetail extends StatelessWidget {
                           decoration: _T.card(r: 12),
                           child: Row(
                             children: [
-                              const Icon(Icons.calendar_today_rounded,
-                                  size: 13, color: _T.green),
+                              const Icon(
+                                Icons.calendar_today_rounded,
+                                size: 13,
+                                color: _T.green,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   dt != null
-                                      ? DateFormat('dd MMM yyyy  •  hh:mm a')
-                                          .format(dt)
+                                      ? DateFormat(
+                                          'dd MMM yyyy  •  hh:mm a',
+                                        ).format(dt)
                                       : 'Unknown date',
                                   style: const TextStyle(
-                                      fontSize: 12, color: _T.textS),
+                                    fontSize: 12,
+                                    color: _T.textS,
+                                  ),
                                 ),
                               ),
                               _Badge(
@@ -288,32 +319,33 @@ class AssistantPatientDetail extends StatelessWidget {
     String label,
     String value, {
     bool isWarning = false,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 16, color: isWarning ? _T.urgent : _T.textM),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 110,
-              child: Text(label,
-                  style: const TextStyle(fontSize: 12, color: _T.textS)),
-            ),
-            Expanded(
-              child: Text(
-                value.isEmpty ? 'N/A' : value,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isWarning ? _T.urgent : _T.textH,
-                ),
-              ),
-            ),
-          ],
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: isWarning ? _T.urgent : _T.textM),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 110,
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: _T.textS),
+          ),
         ),
-      );
+        Expanded(
+          child: Text(
+            value.isEmpty ? 'N/A' : value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isWarning ? _T.urgent : _T.textH,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ── Info Card (local to this file — matches original _InfoCard) ───────────────
@@ -333,30 +365,30 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _T.card(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.all(16),
+    decoration: _T.card(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: color),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-              ],
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
-            const SizedBox(height: 12),
-            const Divider(height: 1, color: _T.divider),
-            const SizedBox(height: 8),
-            ...rows,
           ],
         ),
-      );
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: _T.divider),
+        const SizedBox(height: 8),
+        ...rows,
+      ],
+    ),
+  );
 }

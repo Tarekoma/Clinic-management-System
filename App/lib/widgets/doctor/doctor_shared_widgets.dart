@@ -19,7 +19,7 @@ class DoctorAvatar extends StatelessWidget {
   final String name;
   final double size;
   const DoctorAvatar({required this.name, this.size = 44, Key? key})
-      : super(key: key);
+    : super(key: key);
 
   String get _init {
     final p = name.trim().split(' ');
@@ -30,23 +30,20 @@ class DoctorAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: _T.avatarBg(name),
-          shape: BoxShape.circle,
+    width: size,
+    height: size,
+    decoration: BoxDecoration(color: _T.avatarBg(name), shape: BoxShape.circle),
+    child: Center(
+      child: Text(
+        _init,
+        style: TextStyle(
+          fontSize: size * 0.38,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
         ),
-        child: Center(
-          child: Text(
-            _init,
-            style: TextStyle(
-              fontSize: size * 0.38,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      );
+      ),
+    ),
+  );
 }
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
@@ -63,21 +60,21 @@ class DoctorBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: fg,
-            letterSpacing: 0.3,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        color: fg,
+        letterSpacing: 0.3,
+      ),
+    ),
+  );
 }
 
 // ── Section Header ────────────────────────────────────────────────────────────
@@ -95,35 +92,35 @@ class DoctorSecHead extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          Text(
-            title,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: _T.textH,
+        ),
+      ),
+      const Spacer(),
+      if (action != null)
+        TextButton(
+          onPressed: onAction,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            action!,
             style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: _T.textH,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _T.navy,
             ),
           ),
-          const Spacer(),
-          if (action != null)
-            TextButton(
-              onPressed: onAction,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                action!,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: _T.navy,
-                ),
-              ),
-            ),
-        ],
-      );
+        ),
+    ],
+  );
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -141,41 +138,41 @@ class DoctorEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: _T.bgInput,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 38, color: _T.textM),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _T.textS,
-                ),
-              ),
-              if (sub != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  sub!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: _T.textM),
-                ),
-              ],
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
+              color: _T.bgInput,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 38, color: _T.textM),
           ),
-        ),
-      );
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: _T.textS,
+            ),
+          ),
+          if (sub != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              sub!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: _T.textM),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
@@ -197,47 +194,47 @@ class DoctorStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: _T.card(),
-          child: Row(
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _T.card(),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-                child: Icon(icon, color: color, size: 22),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
               ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: color,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    style: const TextStyle(fontSize: 11, color: _T.textS),
-                  ),
-                  if (sub != null)
-                    Text(
-                      sub!,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _T.textM,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                ],
+              Text(
+                label,
+                style: const TextStyle(fontSize: 11, color: _T.textS),
               ),
+              if (sub != null)
+                Text(
+                  sub!,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: _T.textM,
+                    letterSpacing: 0.4,
+                  ),
+                ),
             ],
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 }

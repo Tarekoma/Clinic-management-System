@@ -218,6 +218,21 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             ),
             const SizedBox(height: 14),
 
+            // ── Email ────────────────────────────────────────────────────
+            TextField(
+              controller: _em,
+              keyboardType: TextInputType.emailAddress,
+              decoration: _T.inp(
+                'Email (optional)',
+                pre: const Icon(
+                  Icons.email_outlined,
+                  size: 18,
+                  color: _T.textM,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // ── NEW: Address ─────────────────────────────────────────────
             TextField(
               controller: _addr,

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+google-genai
+pillow
+faiss-cpu
+sentence-transformers
+rank-bm25
+PyMuPDF
+requests
+numpy
+python-multipart

@@ -81,14 +81,14 @@ The **Intelligent Medical Assistant** is an integrated system designed to automa
 
 ## 👥 Team
 
-| Name | Name (Arabic) |
-|---|---|
-| Tarek Omar Mahmoud | طارق عمر محمود |
-| Abdullah Moatez Mohamed | عبدالله معتز محمد |
-| Ahmed Bahaa-Eldein Naoman | أحمد بهاء الدين نعمان |
-| Hedra Atif Mehany | هدرا عاطف مهني |
-| Mohamed Momen Ezz | محمد مؤمن عز |
-| Yomna Mohamed Khdir | يمنى محمد خضير |
+| Name |
+|---|
+| Tarek Omar Mahmoud |
+| Abdullah Moatez Mohamed |
+| Ahmed Bahaa-Eldein Naoman |
+| Hedra Atif Mehany |
+| Mohamed Momen Ezz |
+| Yomna Mohamed Khdir |
 
 > 👨‍🏫 **Supervised by:** Dr. Hesham H. Amin
 

@@ -12,7 +12,7 @@
 ## 📖 Overview
 
 The **Intelligent Medical Assistant** is an integrated system designed to automate clinic workflows and assist doctors using artificial intelligence. It handles patient registration, medical history management, voice-based report generation, and AI-driven diagnostic support — all through dedicated role-based interfaces for assistants, doctors, and administrators.
-> 🎬 Video Demo : **[Watch Video Demo](https://drive.google.com/file/d/1XBvMnOJjXI8fNW95GfTzmO1BZURQRckb/view?usp=drive_link)**
+> 🎬 Video Demo : **[Watch Video Here](https://drive.google.com/file/d/1XBvMnOJjXI8fNW95GfTzmO1BZURQRckb/view?usp=drive_link)**
 ---
 
 ## 🔍 Problems We Solve

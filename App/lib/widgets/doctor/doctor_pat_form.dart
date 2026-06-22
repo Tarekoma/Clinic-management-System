@@ -1,9 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/widgets/doctor/doctor_pat_form.dart
+// Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 
 typedef _T = DoctorTheme;
@@ -14,6 +16,9 @@ const List<String> kChronicDiseases = [
   'Heart Disease',
   'Asthma',
   'Chronic Kidney Disease',
+  'Thyroid Disorder',
+  'Arthritis',
+  'Obesity',
 ];
 
 // ── Patient Form ──────────────────────────────────────────────────────────────
@@ -44,8 +49,8 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
   final _ph = TextEditingController();
   final _nid = TextEditingController();
   final _em = TextEditingController();
-  // ── NEW: address controller ──────────────────────────────────────────────
   final _addr = TextEditingController();
+  final _customDiseaseCtrl = TextEditingController();
 
   String _gender = 'MALE';
   DateTime? _dob;
@@ -62,15 +67,29 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
       _ph.text = e['phone'] ?? '';
       _nid.text = e['national_id'] ?? '';
       _em.text = e['email'] ?? '';
-      // ── NEW: pre-fill address ────────────────────────────────────────────
       _addr.text = e['address'] ?? '';
       _gender = (e['gender'] ?? 'MALE').toString().toUpperCase();
       try {
         final dob = e['birth_date'] ?? e['date_of_birth'];
         if (dob != null) _dob = DateTime.parse(dob.toString());
       } catch (_) {}
-      final saved = e['chronic_diseases'];
-      if (saved is List) _selectedDiseases.addAll(saved.cast<String>());
+      // Backend returns patient_conditions (array of condition objects).
+      // Extract names where category == CHRONIC.
+      final conditions = e['patient_conditions'];
+      if (conditions is List) {
+        for (final c in conditions) {
+          if (c is! Map) continue;
+          final cat =
+              (c['category'] ?? (c['condition'] as Map?)?['category'] ?? '')
+                  .toString()
+                  .toUpperCase();
+          if (cat != 'CHRONIC') continue;
+          final name =
+              (c['name'] ?? (c['condition'] as Map?)?['name'] ?? '')
+                  .toString();
+          if (name.isNotEmpty) _selectedDiseases.add(name);
+        }
+      }
     }
   }
 
@@ -82,6 +101,7 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
     _nid.dispose();
     _em.dispose();
     _addr.dispose();
+    _customDiseaseCtrl.dispose();
     super.dispose();
   }
 
@@ -98,9 +118,23 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
     );
   }
 
+  void _addCustomDisease() {
+    final name = _customDiseaseCtrl.text.trim();
+    if (name.isEmpty) return;
+    if (_selectedDiseases.any((s) => s.toLowerCase() == name.toLowerCase())) {
+      _customDiseaseCtrl.clear();
+      return;
+    }
+    setState(() {
+      _selectedDiseases.add(name);
+      _customDiseaseCtrl.clear();
+    });
+  }
+
   Future<void> _save() async {
+    final loc = AppLocalizations.of(context)!;
     if (_fn.text.trim().isEmpty || _ln.text.trim().isEmpty) {
-      _snack('First and last name are required.', err: true);
+      _snack(loc.firstLastNameRequired, err: true);
       return;
     }
     setState(() => _saving = true);
@@ -111,7 +145,6 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
         if (_ph.text.isNotEmpty) 'phone': _ph.text.trim(),
         if (_nid.text.isNotEmpty) 'national_id': _nid.text.trim(),
         if (_em.text.isNotEmpty) 'email': _em.text.trim(),
-        // ── NEW: include address if provided ────────────────────────────
         if (_addr.text.isNotEmpty) 'address': _addr.text.trim(),
         'gender': _gender,
         if (_dob != null) 'birth_date': DateFormat('yyyy-MM-dd').format(_dob!),
@@ -131,15 +164,41 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
     }
   }
 
+  /// Localized display label for each diagnosis key in [kChronicDiseases].
+  String _diseaseLabel(AppLocalizations loc, String disease) {
+    switch (disease) {
+      case 'Diabetes':
+        return loc.diseaseDiabetes;
+      case 'Hypertension':
+        return loc.diseaseHypertension;
+      case 'Heart Disease':
+        return loc.diseaseHeartDisease;
+      case 'Asthma':
+        return loc.diseaseAsthma;
+      case 'Chronic Kidney Disease':
+        return loc.diseaseCkd;
+      case 'Arthritis':
+        return loc.diseaseArthritis;
+      case 'Thyroid Disorder':
+        return 'Thyroid Disorder';
+      case 'Obesity':
+        return 'Obesity';
+      default:
+        return disease;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     // ── Safe area bottom accounts for system nav bar + keyboard ─────────────
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: _T.bgCard,
+      decoration: BoxDecoration(
+        color: dt.bgCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -160,7 +219,7 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _T.divider,
+                  color: dt.divider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -168,11 +227,13 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             const SizedBox(height: 20),
 
             Text(
-              widget.existing != null ? 'Edit Patient' : 'Add New Patient',
-              style: const TextStyle(
+              widget.existing != null
+                  ? loc.editPatientTitle
+                  : loc.addNewPatientTitle,
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: _T.textH,
+                color: dt.textH,
               ),
             ),
             const SizedBox(height: 20),
@@ -183,14 +244,14 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                 Expanded(
                   child: TextField(
                     controller: _fn,
-                    decoration: _T.inp('First Name'),
+                    decoration: _T.inpOf(context, loc.firstNameLabel),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _ln,
-                    decoration: _T.inp('Last Name'),
+                    decoration: _T.inpOf(context, loc.lastNameLabel),
                   ),
                 ),
               ],
@@ -201,9 +262,10 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             TextField(
               controller: _ph,
               keyboardType: TextInputType.phone,
-              decoration: _T.inp(
-                'Phone Number',
-                pre: const Icon(Icons.phone_rounded, size: 18, color: _T.textM),
+              decoration: _T.inpOf(
+                context,
+                loc.phoneNumberLabel,
+                pre: Icon(Icons.phone_rounded, size: 18, color: dt.textM),
               ),
             ),
             const SizedBox(height: 14),
@@ -211,9 +273,10 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             // ── National ID ──────────────────────────────────────────────
             TextField(
               controller: _nid,
-              decoration: _T.inp(
-                'National ID',
-                pre: const Icon(Icons.badge_rounded, size: 18, color: _T.textM),
+              decoration: _T.inpOf(
+                context,
+                loc.nationalIdLabel,
+                pre: Icon(Icons.badge_rounded, size: 18, color: dt.textM),
               ),
             ),
             const SizedBox(height: 14),
@@ -222,30 +285,28 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             TextField(
               controller: _em,
               keyboardType: TextInputType.emailAddress,
-              decoration: _T.inp(
-                'Email (optional)',
-                pre: const Icon(
-                  Icons.email_outlined,
-                  size: 18,
-                  color: _T.textM,
-                ),
+              decoration: _T.inpOf(
+                context,
+                loc.emailOptionalLabel,
+                pre: Icon(Icons.email_outlined, size: 18, color: dt.textM),
               ),
             ),
             const SizedBox(height: 14),
 
-            // ── NEW: Address ─────────────────────────────────────────────
+            // ── Address ─────────────────────────────────────────
             TextField(
               controller: _addr,
               keyboardType: TextInputType.streetAddress,
               textCapitalization: TextCapitalization.sentences,
               maxLines: 2,
               minLines: 1,
-              decoration: _T.inp(
-                'Address',
-                pre: const Icon(
+              decoration: _T.inpOf(
+                context,
+                loc.addressLabel,
+                pre: Icon(
                   Icons.location_on_outlined,
                   size: 18,
-                  color: _T.textM,
+                  color: dt.textM,
                 ),
               ),
             ),
@@ -254,20 +315,20 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             // ── Gender ───────────────────────────────────────────────────
             Row(
               children: [
-                const Text(
-                  'Gender: ',
-                  style: TextStyle(fontSize: 13, color: _T.textS),
+                Text(
+                  loc.genderColonLabel,
+                  style: TextStyle(fontSize: 13, color: dt.textS),
                 ),
                 const SizedBox(width: 8),
                 DoctorGBtn(
-                  label: 'Male',
+                  label: loc.male,
                   val: 'MALE',
                   sel: _gender == 'MALE',
                   onTap: () => setState(() => _gender = 'MALE'),
                 ),
                 const SizedBox(width: 8),
                 DoctorGBtn(
-                  label: 'Female',
+                  label: loc.female,
                   val: 'FEMALE',
                   sel: _gender == 'FEMALE',
                   onTap: () => setState(() => _gender = 'FEMALE'),
@@ -288,21 +349,18 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                 if (d != null) setState(() => _dob = d);
               },
               child: InputDecorator(
-                decoration: _T.inp(
-                  'Date of Birth',
-                  pre: const Icon(
-                    Icons.cake_rounded,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.dateOfBirthLabel,
+                  pre: Icon(Icons.cake_rounded, size: 18, color: dt.textM),
                 ),
                 child: Text(
                   _dob != null
                       ? DateFormat('dd MMM yyyy').format(_dob!)
-                      : 'Tap to select',
+                      : loc.tapToSelect,
                   style: TextStyle(
                     fontSize: 13,
-                    color: _dob != null ? _T.textH : _T.textM,
+                    color: _dob != null ? dt.textH : dt.textM,
                   ),
                 ),
               ),
@@ -312,40 +370,46 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
             // ── Chronic Diseases ─────────────────────────────────────────
             Row(
               children: [
-                const Text(
-                  'Chronic Diseases',
-                  style: TextStyle(fontSize: 13, color: _T.textS),
+                Text(
+                  loc.chronicDiseases,
+                  style: TextStyle(fontSize: 13, color: dt.textS),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  '(${_selectedDiseases.length}/5)',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6A1B9A),
+                if (_selectedDiseases.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_selectedDiseases.length}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF6A1B9A),
+                      ),
+                    ),
                   ),
-                ),
-                const Spacer(),
-                const Text(
-                  'Cannot add new diseases',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontStyle: FontStyle.italic,
-                    color: _T.textM,
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 8),
+            // Predefined disease chips
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: kChronicDiseases.map((disease) {
-                final selected = _selectedDiseases.contains(disease);
+                final selected = _selectedDiseases
+                    .any((s) => s.toLowerCase() == disease.toLowerCase());
                 return GestureDetector(
                   onTap: () => setState(() {
                     if (selected) {
-                      _selectedDiseases.remove(disease);
+                      _selectedDiseases.removeWhere(
+                        (s) => s.toLowerCase() == disease.toLowerCase(),
+                      );
                     } else {
                       _selectedDiseases.add(disease);
                     }
@@ -356,12 +420,12 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                       vertical: 7,
                     ),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFF3E5F5) : _T.bgInput,
+                      color: selected ? const Color(0xFFF3E5F5) : dt.bgInput,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: selected
-                            ? const Color(0xFF6A1B9A).withOpacity(0.5)
-                            : _T.divider,
+                            ? const Color(0xFF6A1B9A).withValues(alpha: 0.5)
+                            : dt.divider,
                       ),
                     ),
                     child: Row(
@@ -376,13 +440,13 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                           const SizedBox(width: 4),
                         ],
                         Text(
-                          disease,
+                          _diseaseLabel(loc, disease),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: selected
                                 ? const Color(0xFF6A1B9A)
-                                : _T.textS,
+                                : dt.textS,
                           ),
                         ),
                       ],
@@ -390,6 +454,106 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                   ),
                 );
               }).toList(),
+            ),
+            // Custom disease chips (names not in the predefined list)
+            Builder(
+              builder: (_) {
+                final custom = _selectedDiseases
+                    .where(
+                      (s) => !kChronicDiseases.any(
+                        (p) => p.toLowerCase() == s.toLowerCase(),
+                      ),
+                    )
+                    .toList();
+                if (custom.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: custom.map((name) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3E5F5),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF6A1B9A).withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF6A1B9A),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () => setState(
+                                () => _selectedDiseases.remove(name),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 13,
+                                color: Color(0xFF6A1B9A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
+            ),
+            // Custom disease entry
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _customDiseaseCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _T.inpOf(
+                      context,
+                      'Add other condition…',
+                      pre: Icon(
+                        Icons.add_circle_outline_rounded,
+                        size: 18,
+                        color: dt.textM,
+                      ),
+                    ),
+                    onSubmitted: (_) => _addCustomDisease(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _addCustomDisease,
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6A1B9A),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
 
@@ -418,8 +582,8 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
                       )
                     : Text(
                         widget.existing != null
-                            ? 'Save Changes'
-                            : 'Add Patient',
+                            ? loc.saveChanges
+                            : loc.addPatient,
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -428,7 +592,7 @@ class _DoctorPatFormState extends State<DoctorPatForm> {
               ),
             ),
 
-            // ── NEW: Extra safe-area gap below button ────────────────────
+            // ── Extra safe-area gap below button ────────────────────
             // Ensures the button never sits directly on top of the
             // Android gesture / button navigation bar.
             SizedBox(height: bottomPadding > 0 ? 0 : 12),
@@ -454,23 +618,26 @@ class DoctorGBtn extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: sel ? _T.navy : _T.bgInput,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: sel ? _T.navy : _T.divider),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: sel ? Colors.white : _T.textS,
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: sel ? _T.navy : dt.bgInput,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sel ? _T.navy : dt.divider),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: sel ? Colors.white : dt.textS,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

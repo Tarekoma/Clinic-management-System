@@ -4,6 +4,7 @@
 
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/services/API_Service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -24,6 +25,16 @@ class AssistantState {
   final String patientSearchQuery;
   final String apptSearchQuery;
   final Map<String, dynamic>? lastCreatedPatient;
+  final Map<int, Map<String, dynamic>> vitalsCache;
+
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  final bool patientsHasMore;
+  final int patientsSkip;
+  final bool loadingMorePatients;
+
+  final bool appointmentsHasMore;
+  final int appointmentsSkip;
+  final bool loadingMoreAppointments;
 
   const AssistantState({
     this.doctors = const [],
@@ -38,6 +49,13 @@ class AssistantState {
     this.patientSearchQuery = '',
     this.apptSearchQuery = '',
     this.lastCreatedPatient,
+    this.vitalsCache = const {},
+    this.patientsHasMore = true,
+    this.patientsSkip = 0,
+    this.loadingMorePatients = false,
+    this.appointmentsHasMore = true,
+    this.appointmentsSkip = 0,
+    this.loadingMoreAppointments = false,
   });
 
   AssistantState copyWith({
@@ -54,6 +72,13 @@ class AssistantState {
     String? apptSearchQuery,
     Map<String, dynamic>? lastCreatedPatient,
     bool eraseLastCreatedPatient = false,
+    Map<int, Map<String, dynamic>>? vitalsCache,
+    bool? patientsHasMore,
+    int? patientsSkip,
+    bool? loadingMorePatients,
+    bool? appointmentsHasMore,
+    int? appointmentsSkip,
+    bool? loadingMoreAppointments,
   }) {
     return AssistantState(
       doctors: doctors ?? this.doctors,
@@ -70,6 +95,14 @@ class AssistantState {
       lastCreatedPatient: eraseLastCreatedPatient
           ? null
           : (lastCreatedPatient ?? this.lastCreatedPatient),
+      vitalsCache: vitalsCache ?? this.vitalsCache,
+      patientsHasMore: patientsHasMore ?? this.patientsHasMore,
+      patientsSkip: patientsSkip ?? this.patientsSkip,
+      loadingMorePatients: loadingMorePatients ?? this.loadingMorePatients,
+      appointmentsHasMore: appointmentsHasMore ?? this.appointmentsHasMore,
+      appointmentsSkip: appointmentsSkip ?? this.appointmentsSkip,
+      loadingMoreAppointments:
+          loadingMoreAppointments ?? this.loadingMoreAppointments,
     );
   }
 }
@@ -83,6 +116,8 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
     : super(
         const AssistantState(loadingPatients: true, loadingAppointments: true),
       );
+
+  static const int _pageSize = 20;
 
   // The linked doctor's PK — resolved once and cached for the session.
   int? _linkedDoctorId;
@@ -297,21 +332,26 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
   // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> fetchPatients({String search = ''}) async {
-    state = state.copyWith(loadingPatients: true, patientsError: false);
+    state = state.copyWith(
+      loadingPatients: true,
+      patientsError: false,
+      patientsSkip: 0,
+      patientsHasMore: true,
+    );
     try {
-      // Pass _linkedDoctorId explicitly so the backend filters by this doctor.
-      // The assistant JWT alone doesn't scope patients — the doctor's patients
-      // endpoint requires an explicit doctor_id filter from the assistant.
-      // The doctor interface works without it because the doctor JWT scopes it.
-      print('👥 fetchPatients → doctor_id=$_linkedDoctorId');
+      print('👥 fetchPatients → doctor_id=$_linkedDoctorId search="$search"');
       final data = await ApiService.getPatients(
         search: search,
         doctorId: _linkedDoctorId,
+        skip: 0,
+        limit: _pageSize,
       );
       print('👥 fetchPatients → ${data.length} records');
       state = state.copyWith(
         patients: List<Map<String, dynamic>>.from(data),
         loadingPatients: false,
+        patientsSkip: data.length,
+        patientsHasMore: data.length >= _pageSize,
       );
     } catch (e) {
       print('❌ fetchPatients: $e');
@@ -319,12 +359,46 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
     }
   }
 
-  Future<void> fetchAppointments() async {
-    state = state.copyWith(loadingAppointments: true, appointmentsError: false);
+  Future<void> loadMorePatients() async {
+    if (state.loadingMorePatients ||
+        !state.patientsHasMore ||
+        state.loadingPatients) return;
+    state = state.copyWith(loadingMorePatients: true);
     try {
-      // Always filter by _linkedDoctorId so we only see this doctor's appointments.
+      final data = await ApiService.getPatients(
+        search: state.patientSearchQuery,
+        doctorId: _linkedDoctorId,
+        skip: state.patientsSkip,
+        limit: _pageSize,
+      );
+      state = state.copyWith(
+        patients: [
+          ...state.patients,
+          ...List<Map<String, dynamic>>.from(data),
+        ],
+        loadingMorePatients: false,
+        patientsSkip: state.patientsSkip + data.length,
+        patientsHasMore: data.length >= _pageSize,
+      );
+    } catch (_) {
+      state = state.copyWith(loadingMorePatients: false);
+    }
+  }
+
+  Future<void> fetchAppointments() async {
+    state = state.copyWith(
+      loadingAppointments: true,
+      appointmentsError: false,
+      appointmentsSkip: 0,
+      appointmentsHasMore: true,
+    );
+    try {
       print('📅 fetchAppointments → doctor_id=$_linkedDoctorId');
-      final data = await ApiService.getAppointments(doctorId: _linkedDoctorId);
+      final data = await ApiService.getAppointments(
+        doctorId: _linkedDoctorId,
+        skip: 0,
+        limit: _pageSize,
+      );
       print('📅 fetchAppointments → ${data.length} records');
 
       final list = List<Map<String, dynamic>>.from(data)
@@ -334,13 +408,46 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
           return (db ?? DateTime.now()).compareTo(da ?? DateTime.now());
         });
 
-      state = state.copyWith(appointments: list, loadingAppointments: false);
+      state = state.copyWith(
+        appointments: list,
+        loadingAppointments: false,
+        appointmentsSkip: data.length,
+        appointmentsHasMore: data.length >= _pageSize,
+      );
     } catch (e) {
       print('❌ fetchAppointments: $e');
       state = state.copyWith(
         loadingAppointments: false,
         appointmentsError: true,
       );
+    }
+  }
+
+  Future<void> loadMoreAppointments() async {
+    if (state.loadingMoreAppointments ||
+        !state.appointmentsHasMore ||
+        state.loadingAppointments) return;
+    state = state.copyWith(loadingMoreAppointments: true);
+    try {
+      final data = await ApiService.getAppointments(
+        doctorId: _linkedDoctorId,
+        skip: state.appointmentsSkip,
+        limit: _pageSize,
+      );
+      final newItems = List<Map<String, dynamic>>.from(data)
+        ..sort((a, b) {
+          final da = _parseDate(a['start_time']);
+          final db = _parseDate(b['start_time']);
+          return (db ?? DateTime.now()).compareTo(da ?? DateTime.now());
+        });
+      state = state.copyWith(
+        appointments: [...state.appointments, ...newItems],
+        loadingMoreAppointments: false,
+        appointmentsSkip: state.appointmentsSkip + data.length,
+        appointmentsHasMore: data.length >= _pageSize,
+      );
+    } catch (_) {
+      state = state.copyWith(loadingMoreAppointments: false);
     }
   }
 
@@ -364,11 +471,6 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
 
   Future<void> updateAppointmentStatus(int id, String status) async {
     await ApiService.updateAppointmentStatus(id, status);
-    await fetchAppointments();
-  }
-
-  Future<void> deleteAppointment(int id) async {
-    await ApiService.deleteAppointment(id);
     await fetchAppointments();
   }
 
@@ -397,27 +499,291 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
     Map<String, dynamic> data, {
     int? existingId,
   }) async {
+    final newDiseases = List<String>.from(
+      data.remove('chronic_diseases') ?? [],
+    );
     if (existingId != null) {
       await ApiService.updatePatient(existingId, data);
+      await fetchPatients();
+      await _syncPatientConditions(
+        patientId: existingId,
+        newDiseaseNames: newDiseases,
+      );
       state = state.copyWith(eraseLastCreatedPatient: true);
     } else {
       final created = await ApiService.createPatient(data);
-      if (created is Map<String, dynamic>) {
-        state = state.copyWith(
-          lastCreatedPatient: Map<String, dynamic>.from(created),
+      final newId = int.tryParse((created['id'] ?? 0).toString()) ?? 0;
+      state = state.copyWith(
+        lastCreatedPatient: Map<String, dynamic>.from(created),
+      );
+      await fetchPatients();
+      if (newDiseases.isNotEmpty && newId > 0) {
+        await _syncPatientConditions(
+          patientId: newId,
+          newDiseaseNames: newDiseases,
         );
       }
     }
-    await fetchPatients();
   }
 
   void clearLastCreatedPatient() =>
       state = state.copyWith(eraseLastCreatedPatient: true);
 
+  Future<void> _syncPatientConditions({
+    required int patientId,
+    required List<String> newDiseaseNames,
+  }) async {
+    try {
+      var catalog = List<Map<String, dynamic>>.from(
+        await ApiService.getConditions(),
+      );
+      final patient = state.patients.firstWhere(
+        (p) => p['id'].toString() == patientId.toString(),
+        orElse: () => {},
+      );
+      final currentConditions = _extractChronicConditions(patient);
+      final currentNamesLower = currentConditions
+          .map((c) => _conditionName(c).toLowerCase())
+          .toSet();
+      final newNamesLower =
+          newDiseaseNames.map((n) => n.toLowerCase()).toSet();
+
+      final toAdd = newDiseaseNames
+          .where((n) => !currentNamesLower.contains(n.toLowerCase()))
+          .toList();
+      final toRemove = currentConditions
+          .where(
+            (c) => !newNamesLower.contains(_conditionName(c).toLowerCase()),
+          )
+          .toList();
+
+      for (final c in toRemove) {
+        final condId = int.tryParse(
+              (c['condition_id'] ??
+                      (c['condition'] as Map?)?['id'] ??
+                      0)
+                  .toString(),
+            ) ??
+            0;
+        if (condId > 0) {
+          try {
+            await ApiService.removeCondition(patientId, condId);
+          } catch (_) {}
+        }
+      }
+
+      for (final name in toAdd) {
+        Map<String, dynamic>? match;
+        for (final c in catalog) {
+          if ((c['name'] ?? '').toString().toLowerCase() ==
+              name.toLowerCase()) {
+            match = c;
+            break;
+          }
+        }
+        if (match == null) {
+          for (final c in catalog) {
+            final cn = (c['name'] ?? '').toString().toLowerCase();
+            if (cn.contains(name.toLowerCase()) ||
+                name.toLowerCase().contains(cn)) {
+              match = c;
+              break;
+            }
+          }
+        }
+        if (match == null || match['id'] == null) {
+          try {
+            match = await ApiService.createCondition(name, 'CHRONIC');
+            catalog.add(match);
+          } catch (_) {
+            try {
+              final found = List<Map<String, dynamic>>.from(
+                await ApiService.getConditions(search: name),
+              );
+              if (found.isNotEmpty) match = found.first;
+            } catch (_) {}
+          }
+        }
+        if (match != null && match['id'] != null) {
+          try {
+            await ApiService.assignCondition(
+              patientId,
+              int.parse(match['id'].toString()),
+              '',
+            );
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  static List<Map<String, dynamic>> _extractChronicConditions(
+    Map<String, dynamic> patient,
+  ) {
+    final raw = patient['patient_conditions'];
+    if (raw is! List) return [];
+    final result = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final cat =
+          (item['category'] ??
+                  (item['condition'] as Map?)?['category'] ??
+                  '')
+              .toString()
+              .toUpperCase();
+      if (cat == 'CHRONIC') result.add(Map<String, dynamic>.from(item));
+    }
+    return result;
+  }
+
+  static String _conditionName(Map<String, dynamic> c) =>
+      (c['name'] ?? (c['condition'] as Map?)?['name'] ?? '').toString();
+
   Future<void> deletePatient(int id) async {
     await ApiService.deletePatient(id);
     await fetchPatients();
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VITALS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>?> fetchVitalsForAppointment(
+    int appointmentId,
+  ) async {
+    try {
+      final visits = await ApiService.getVisits();
+      for (final raw in visits) {
+        if (raw is! Map) continue;
+        final v = Map<String, dynamic>.from(raw);
+        final apptId = v['appointment_id']?.toString() ??
+            (v['appointment'] is Map
+                ? v['appointment']['id']?.toString()
+                : null);
+        if (apptId == appointmentId.toString() && _hasVitals(v)) {
+          final vitals = _visitToVitals(v);
+          final updated =
+              Map<int, Map<String, dynamic>>.from(state.vitalsCache);
+          updated[appointmentId] = vitals;
+          state = state.copyWith(vitalsCache: updated);
+          debugPrint(
+            '💊 fetchVitalsForAppointment($appointmentId): found in visit ${v['id']}',
+          );
+          return vitals;
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ fetchVitalsForAppointment error: $e');
+    }
+    return null;
+  }
+
+  static bool _hasVitals(Map<String, dynamic> v) =>
+      v['blood_pressure'] != null ||
+      v['heart_rate'] != null ||
+      v['temperature'] != null ||
+      v['weight'] != null ||
+      v['height'] != null;
+
+  static Map<String, dynamic> _visitToVitals(Map<String, dynamic> visit) {
+    final bp = (visit['blood_pressure'] ?? '').toString().trim();
+    final parts = bp.isNotEmpty ? bp.split('/') : <String>[];
+    return {
+      'blood_pressure_systolic': parts.isNotEmpty ? parts[0].trim() : null,
+      'blood_pressure_diastolic': parts.length > 1 ? parts[1].trim() : null,
+      'heart_rate': visit['heart_rate'],
+      'temperature': visit['temperature'],
+      'weight': visit['weight'],
+      'height': visit['height'],
+      'chief_complaint': visit['chief_complaint'],
+      'notes': visit['notes'],
+      'recorded_at': visit['updated_at'] ?? visit['created_at'],
+      'created_at': visit['created_at'],
+      '_visit_id': visit['id'],
+    };
+  }
+
+  Future<Map<String, dynamic>> saveVitals({
+    required int appointmentId,
+    required int patientId,
+    required Map<String, dynamic> vitalsData,
+  }) async {
+    // Map app field names → backend visit field names.
+    // The backend stores blood pressure as a single "120/80" string.
+    final sys = vitalsData['blood_pressure_systolic'];
+    final dia = vitalsData['blood_pressure_diastolic'];
+    final Map<String, dynamic> visitPayload = {};
+    if (sys != null && dia != null) {
+      visitPayload['blood_pressure'] = '$sys/$dia';
+    } else if (sys != null) {
+      visitPayload['blood_pressure'] = '$sys';
+    }
+    if (vitalsData['heart_rate'] != null) {
+      visitPayload['heart_rate'] = vitalsData['heart_rate'];
+    }
+    if (vitalsData['temperature'] != null) {
+      visitPayload['temperature'] = vitalsData['temperature'];
+    }
+    if (vitalsData['weight'] != null) {
+      visitPayload['weight'] = vitalsData['weight'];
+    }
+    if (vitalsData['height'] != null) {
+      visitPayload['height'] = vitalsData['height'];
+    }
+    if ((vitalsData['chief_complaint'] ?? '').toString().isNotEmpty) {
+      visitPayload['chief_complaint'] = vitalsData['chief_complaint'];
+    }
+    if ((vitalsData['notes'] ?? '').toString().isNotEmpty) {
+      visitPayload['notes'] = vitalsData['notes'];
+    }
+
+    debugPrint('💊 saveVitals visitPayload: $visitPayload');
+
+    // Find an existing visit for this appointment so we PATCH it rather than
+    // creating a duplicate.
+    int? existingVisitId;
+    try {
+      final visits = await ApiService.getVisits(
+        patientId: patientId > 0 ? patientId : null,
+      );
+      for (final raw in visits) {
+        if (raw is! Map) continue;
+        final v = Map<String, dynamic>.from(raw);
+        final apptId = v['appointment_id']?.toString() ??
+            (v['appointment'] is Map
+                ? v['appointment']['id']?.toString()
+                : null);
+        if (apptId == appointmentId.toString()) {
+          existingVisitId = int.tryParse((v['id'] ?? 0).toString());
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ saveVitals: getVisits failed ($e) — will create visit');
+    }
+
+    final Map<String, dynamic> result;
+    if (existingVisitId != null && existingVisitId > 0) {
+      debugPrint('💊 PATCHing visit $existingVisitId with vitals');
+      result = await ApiService.updateVisit(existingVisitId, visitPayload);
+    } else {
+      debugPrint('💊 POSTing new visit with vitals for appt $appointmentId');
+      result = await ApiService.startVisit({
+        'appointment_id': appointmentId,
+        ...visitPayload,
+      });
+    }
+
+    debugPrint('✅ saveVitals result: $result');
+
+    final updated = Map<int, Map<String, dynamic>>.from(state.vitalsCache);
+    updated[appointmentId] = _visitToVitals(result);
+    state = state.copyWith(vitalsCache: updated);
+    return result;
+  }
+
+  Map<String, dynamic>? getCachedVitals(int appointmentId) =>
+      state.vitalsCache[appointmentId];
 
   // ══════════════════════════════════════════════════════════════════════════
   // SEARCH
@@ -458,7 +824,8 @@ class AssistantViewModel extends StateNotifier<AssistantState> {
   Map<String, double> paymentStats() {
     double total = 0, paid = 0;
     for (final a in state.appointments) {
-      if ((a['status'] ?? '').toUpperCase() == 'CANCELLED') continue;
+      final s = (a['status'] ?? '').toUpperCase();
+      if (s == 'CANCELLED' || s == 'NO_SHOW') continue;
       final fee = double.tryParse((a['fee'] ?? 0).toString()) ?? 0.0;
       total += fee;
       if (a['is_paid'] == true) paid += fee;

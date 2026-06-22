@@ -10,9 +10,12 @@
 //   • Search query stored in controller, pushed to ViewModel on change
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/views/assistant/assistant_vitals_page.dart';
+import 'package:Hakim/viewmodels/assistant_viewmodel.dart';
 import 'package:Hakim/widgets/assistant/assistant_appt_form.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/providers/assistant_providers.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'package:Hakim/widgets/assistant/assistant_shared_widgets.dart';
@@ -32,11 +35,27 @@ class AssistantAppointmentsPage extends ConsumerStatefulWidget {
 class _AssistantAppointmentsPageState
     extends ConsumerState<AssistantAppointmentsPage> {
   final _searchCtrl = TextEditingController();
+  bool _isLoadingMore = false;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollEndNotification &&
+        notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 300) {
+      if (!_isLoadingMore) {
+        _isLoadingMore = true;
+        ref
+            .read(assistantViewModelProvider.notifier)
+            .loadMoreAppointments()
+            .whenComplete(() => _isLoadingMore = false);
+      }
+    }
+    return false;
   }
 
   // ── SnackBar helper ─────────────────────────────────────────────────────────
@@ -60,13 +79,14 @@ class _AssistantAppointmentsPageState
     final status = (a['status'] ?? '').toUpperCase();
     final id = int.tryParse((a['id'] ?? '0').toString()) ?? 0;
     final vm = ref.read(assistantViewModelProvider.notifier);
+    final loc = AppLocalizations.of(context)!;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: _T.bgCard,
+        decoration: BoxDecoration(
+          color: Theme.of(context).extension<AssistantThemeData>()!.bgCard,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: EdgeInsets.only(
@@ -83,7 +103,9 @@ class _AssistantAppointmentsPageState
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _T.divider,
+                  color: Theme.of(
+                    context,
+                  ).extension<AssistantThemeData>()!.divider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -91,99 +113,98 @@ class _AssistantAppointmentsPageState
             const SizedBox(height: 8),
             AssistantBottomSheetTile(
               icon: Icons.edit_rounded,
-              label: 'Edit Appointment',
+              label: loc.editAppointmentTitle,
               color: _T.info,
               onTap: () {
                 Navigator.pop(ctx);
                 _showForm(a);
               },
             ),
+            AssistantBottomSheetTile(
+              icon: Icons.monitor_heart_rounded,
+              label: loc.recordVitals,
+              color: _T.green,
+              onTap: () {
+                Navigator.pop(ctx);
+                _showVitals(a);
+              },
+            ),
             if (status == 'SCHEDULED')
               AssistantBottomSheetTile(
                 icon: Icons.lock_clock_rounded,
-                label: 'Confirm Appointment',
+                label: loc.confirmAppointmentAction,
                 color: _T.confirmed,
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await _updateStatus(vm, id, 'CONFIRMED');
+                  await _updateStatus(vm, id, 'CONFIRMED', loc);
                 },
               ),
             if (status == 'SCHEDULED' || status == 'CONFIRMED')
               AssistantBottomSheetTile(
                 icon: Icons.check_circle_outline_rounded,
-                label: 'Mark as Completed',
+                label: loc.markAsCompletedAction,
                 color: _T.success,
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await _updateStatus(vm, id, 'COMPLETED');
+                  await _updateStatus(vm, id, 'COMPLETED', loc);
                 },
               ),
-            if (status != 'CANCELLED' && status != 'COMPLETED')
+            if (status == 'SCHEDULED' || status == 'CONFIRMED')
+              AssistantBottomSheetTile(
+                icon: Icons.person_off_outlined,
+                label: loc.markAsNoShow,
+                color: _T.muted,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _updateStatus(vm, id, 'NO_SHOW', loc);
+                },
+              ),
+            if (status != 'CANCELLED' &&
+                status != 'COMPLETED' &&
+                status != 'NO_SHOW')
               AssistantBottomSheetTile(
                 icon: Icons.cancel_outlined,
-                label: 'Cancel Appointment',
+                label: loc.cancelAppointmentAction,
                 color: _T.warning,
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await _updateStatus(vm, id, 'CANCELLED');
+                  await _updateStatus(vm, id, 'CANCELLED', loc);
                 },
               ),
-            AssistantBottomSheetTile(
-              icon: Icons.delete_outline_rounded,
-              label: 'Delete Appointment',
-              color: _T.urgent,
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmDelete(a, vm);
-              },
-            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _updateStatus(dynamic vm, int id, String status) async {
+  Future<void> _updateStatus(
+    dynamic vm,
+    int id,
+    String status,
+    AppLocalizations loc,
+  ) async {
     try {
       await vm.updateAppointmentStatus(id, status);
-      _snack('Status updated to ${_T.sLabel(status)}');
+      _snack(loc.statusUpdatedTo(_T.sLabel(status, loc)));
     } catch (e) {
-      _snack('Failed: ${vm.runtimeType}.extractError(e)', err: true);
+      _snack(loc.actionFailed(e.toString()), err: true);
     }
   }
 
-  Future<void> _confirmDelete(Map<String, dynamic> a, dynamic vm) async {
-    final name = ref.read(assistantViewModelProvider.notifier).apptName(a);
-    final ok = await showDialog<bool>(
+  void _showVitals(Map<String, dynamic> a) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Appointment'),
-        content: Text('Delete appointment for $name? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ScaffoldMessenger(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.urgent,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
+          child: AssistantVitalsPage(appointment: a, onSaved: () {}),
+        ),
       ),
     );
-    if (ok != true) return;
-    try {
-      final id = int.tryParse((a['id'] ?? '0').toString()) ?? 0;
-      await ref.read(assistantViewModelProvider.notifier).deleteAppointment(id);
-      _snack('Appointment deleted');
-    } catch (e) {
-      _snack('Failed: ${e.toString()}', err: true);
-    }
   }
 
   void _showForm([Map<String, dynamic>? existing]) {
@@ -201,6 +222,7 @@ class _AssistantAppointmentsPageState
               ? int.tryParse(state.activeDoctor!['id'].toString())
               : null,
           appointmentTypes: state.appointmentTypes,
+          existingAppointments: state.appointments,
           patName: vm.patName,
           onSubmit: vm.createOrUpdateAppointment,
           onSaved: vm.fetchAppointments,
@@ -245,12 +267,14 @@ class _AssistantAppointmentsPageState
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
     final state = ref.watch(assistantViewModelProvider);
     final vm = ref.read(assistantViewModelProvider.notifier);
+    final loc = AppLocalizations.of(context)!;
 
     if (state.appointmentsError) {
       return AssistantErrorWidget(
-        message: 'Failed to load appointments',
+        message: loc.failedToLoadAppointments,
         onRetry: vm.fetchAppointments,
       );
     }
@@ -295,21 +319,26 @@ class _AssistantAppointmentsPageState
     }).firstOrNull;
 
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: at.bgPage,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showForm(),
         backgroundColor: _T.green,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'New Appointment',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        label: Text(
+          loc.newAppointment,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: RefreshIndicator(
         onRefresh: vm.fetchAppointments,
         color: _T.green,
-        child: CustomScrollView(
-          slivers: [
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _handleScrollNotification,
+          child: CustomScrollView(
+            slivers: [
             // ── Search + summary ──────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
@@ -318,12 +347,13 @@ class _AssistantAppointmentsPageState
                   children: [
                     TextField(
                       controller: _searchCtrl,
-                      decoration: _T.inp(
-                        'Search by patient name, phone...',
-                        pre: const Icon(
+                      decoration: _T.inpOf(
+                        context,
+                        loc.searchPatientNameFull,
+                        pre: Icon(
                           Icons.search_rounded,
                           size: 20,
-                          color: _T.textM,
+                          color: at.textM,
                         ),
                         suf: _searchCtrl.text.isNotEmpty
                             ? IconButton(
@@ -344,21 +374,21 @@ class _AssistantAppointmentsPageState
                     Row(
                       children: [
                         AssistantCountChip(
-                          label: 'Today',
+                          label: loc.filterToday,
                           count: todayList.length,
                           color: _T.green,
                           bg: _T.greenPale,
                         ),
                         const SizedBox(width: 8),
                         AssistantCountChip(
-                          label: 'Upcoming',
+                          label: loc.filterUpcoming,
                           count: upList.length,
                           color: _T.info,
                           bg: _T.infoBg,
                         ),
                         const SizedBox(width: 8),
                         AssistantCountChip(
-                          label: 'Urgent',
+                          label: loc.filterUrgent,
                           count: all
                               .where((a) => a['is_urgent'] == true)
                               .length,
@@ -383,16 +413,16 @@ class _AssistantAppointmentsPageState
                 ),
               )
             else if (all.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 child: _Empty(
                   icon: Icons.calendar_month_outlined,
-                  title: 'No appointments found',
-                  sub: 'Tap + to create a new appointment.',
+                  title: loc.noAppointmentsFound,
+                  sub: loc.tapToCreateAppointment,
                 ),
               )
             else ...[
               if (serving != null) ...[
-                _sectionHeader('Now Serving', _T.green),
+                _sectionHeader(loc.nowServing, _T.green),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverToBoxAdapter(
@@ -405,7 +435,7 @@ class _AssistantAppointmentsPageState
                 ),
               ],
               if (todayList.isNotEmpty) ...[
-                _sectionHeader("Today's Queue", _T.green),
+                _sectionHeader(loc.todaysQueue, _T.green),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
@@ -420,7 +450,7 @@ class _AssistantAppointmentsPageState
                 ),
               ],
               if (upList.isNotEmpty) ...[
-                _sectionHeader('Upcoming', _T.info),
+                _sectionHeader(loc.filterUpcoming, _T.info),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
@@ -435,9 +465,9 @@ class _AssistantAppointmentsPageState
                 ),
               ],
               if (pastList.isNotEmpty) ...[
-                _sectionHeader('Past', _T.muted),
+                _sectionHeader(loc.pastLabel, _T.muted),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (_, i) => AssistantApptCard(
@@ -450,9 +480,42 @@ class _AssistantAppointmentsPageState
                 ),
               ],
             ],
-          ],
+            // ── Pagination footer ─────────────────────────────────────────
+            if (!state.loadingAppointments)
+              SliverToBoxAdapter(
+                child: _buildApptFooter(state, loc, at),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildApptFooter(
+    AssistantState state,
+    AppLocalizations loc,
+    AssistantThemeData at,
+  ) {
+    if (state.loadingMoreAppointments) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: CircularProgressIndicator(color: _T.green, strokeWidth: 2),
+        ),
+      );
+    }
+    if (!state.appointmentsHasMore && state.appointments.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 100, top: 20),
+        child: Center(
+          child: Text(
+            loc.endOfResults,
+            style: TextStyle(fontSize: 12, color: at.textM),
+          ),
+        ),
+      );
+    }
+    return const SizedBox(height: 100);
   }
 }

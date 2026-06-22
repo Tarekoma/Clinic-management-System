@@ -4,8 +4,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/providers/assistant_providers.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
+import 'package:Hakim/viewmodels/assistant_viewmodel.dart';
 import 'package:Hakim/widgets/assistant/assistant_shared_widgets.dart';
 import 'package:Hakim/widgets/assistant/assistant_pat_card.dart';
 import 'package:Hakim/widgets/assistant/assistant_pat_form.dart';
@@ -25,11 +28,28 @@ class AssistantPatientsPage extends ConsumerStatefulWidget {
 
 class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      ref.read(assistantViewModelProvider.notifier).loadMorePatients();
+    }
   }
 
   // ── SnackBar helper ─────────────────────────────────────────────────────────
@@ -120,6 +140,7 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
               ? int.tryParse(state.activeDoctor!['id'].toString())
               : null,
           appointmentTypes: state.appointmentTypes,
+          existingAppointments: state.appointments,
           patName: vm.patName,
           onSubmit: vm.createOrUpdateAppointment,
           onSaved: vm.fetchAppointments,
@@ -130,36 +151,42 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
   }
 
   Future<void> _deletePatient(Map<String, dynamic> p) async {
+    final loc = AppLocalizations.of(context)!;
     final vm = ref.read(assistantViewModelProvider.notifier);
     final name = vm.patName(p);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Patient'),
-        content: Text('Delete $name? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder: (ctx) => Theme(
+        data: Theme.of(context),
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.urgent,
-              foregroundColor: Colors.white,
+          title: Text(loc.deletePatientTitle),
+          content: Text(loc.deletePatientBody(name)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(loc.cancel),
             ),
-            child: const Text('Delete'),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _T.urgent,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(loc.delete),
+            ),
+          ],
+        ),
       ),
     );
     if (ok != true) return;
     try {
       await vm.deletePatient(p['id'] as int);
-      _snack('$name deleted');
+      _snack(loc.patientDeleted(name));
     } catch (e) {
-      _snack('Failed: ${e.toString()}', err: true);
+      _snack(loc.actionFailed(e.toString()), err: true);
     }
   }
 
@@ -167,26 +194,32 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
     final state = ref.watch(assistantViewModelProvider);
     final vm = ref.read(assistantViewModelProvider.notifier);
     final filtered = vm.filteredPatients;
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
 
     if (state.patientsError) {
       return AssistantErrorWidget(
-        message: 'Failed to load patients',
+        message: loc.failedToLoadPatients,
         onRetry: vm.fetchPatients,
       );
     }
 
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: at.bgPage,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showForm(),
         backgroundColor: _T.green,
         icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text(
-          'Add Patient',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        label: Text(
+          loc.addPatient,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: RefreshIndicator(
@@ -199,13 +232,10 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: TextField(
                 controller: _searchCtrl,
-                decoration: _T.inp(
-                  'Search by name, phone, or national ID...',
-                  pre: const Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.searchPatientFull,
+                  pre: Icon(Icons.search_rounded, size: 20, color: at.textM),
                   suf: _searchCtrl.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear_rounded, size: 18),
@@ -232,21 +262,21 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
               child: Row(
                 children: [
                   Text(
-                    '${state.patients.length} patients total',
-                    style: const TextStyle(
+                    arDigits(loc.patientsTotalCount(state.patients.length), lc),
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _T.textM,
+                      color: at.textM,
                       letterSpacing: 0.5,
                     ),
                   ),
                   if (_searchCtrl.text.isNotEmpty) ...[
-                    const Text(
+                    Text(
                       '  •  ',
-                      style: TextStyle(fontSize: 11, color: _T.textM),
+                      style: TextStyle(fontSize: 11, color: at.textM),
                     ),
                     Text(
-                      '${filtered.length} results',
+                      arDigits(loc.resultsCount(filtered.length), lc),
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -268,30 +298,66 @@ class _AssistantPatientsPageState extends ConsumerState<AssistantPatientsPage> {
                       ),
                     )
                   : filtered.isEmpty
-                  ? const _Empty(
+                  ? _Empty(
                       icon: Icons.people_outline_rounded,
-                      title: 'No patients found',
-                      sub: 'Try a different search or add a new patient.',
+                      title: loc.noPatientsFound,
+                      sub: loc.noPatientsFoundSub,
                     )
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) {
-                        final p = filtered[i];
-                        return AssistantPatCard(
-                          patient: p,
-                          onTap: () => _showDetail(p),
-                          onEdit: () => _showForm(p),
-                          onDelete: () => _deletePatient(p),
-                        );
-                      },
-                    ),
+                  : _buildPatientList(filtered, state, at, loc),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPatientList(
+    List<Map<String, dynamic>> list,
+    AssistantState state,
+    AssistantThemeData at,
+    AppLocalizations loc,
+  ) {
+    final showFooter = state.loadingMorePatients || !state.patientsHasMore;
+
+    return ListView.builder(
+      controller: _scrollCtrl,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
+      itemCount: list.length + (showFooter ? 1 : 0),
+      itemBuilder: (_, i) {
+        if (i == list.length) {
+          if (state.loadingMorePatients) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: _T.green,
+                  strokeWidth: 2,
+                ),
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text(
+                loc.endOfResults,
+                style: TextStyle(fontSize: 12, color: at.textM),
+              ),
+            ),
+          );
+        }
+        final p = list[i];
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < list.length - 1 ? 10 : 0),
+          child: AssistantPatCard(
+            patient: p,
+            onTap: () => _showDetail(p),
+            onEdit: () => _showForm(p),
+            onDelete: () => _deletePatient(p),
+          ),
+        );
+      },
     );
   }
 }

@@ -1,7 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// lib/views/auth/login_page.dart
+// lib/views/auths/login_page.dart
 //
 // Login screen — UI only.
+//
+// IMPORTANT: This page is intentionally NOT localized. It always renders in
+// English and always lays out left-to-right (LTR), regardless of the app's
+// selected language (English/Arabic). This is enforced via
+// Localizations.override + Directionality at the top of build().
 //
 // What this file does:
 //   • Renders the page (gradient background, orbs, header, form card)
@@ -17,6 +22,7 @@
 //   • No role resolution logic
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/views/admin/admin_interface.dart';
 import 'package:Hakim/views/assistant/assistant_interface.dart';
 import 'package:Hakim/views/auths/registration_page.dart';
 import 'package:Hakim/views/doctor/doctor_pages/doctor_interface.dart';
@@ -189,6 +195,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
         _go(DoctorInterface(doctorProfile: state.user!));
       case AuthDestination.assistant:
         _go(AssistantInterface(assistantProfile: state.user!));
+      case AuthDestination.admin:
+        _go(AdminInterface(adminProfile: state.user!));
       case AuthDestination.none:
         break;
     }
@@ -241,71 +249,85 @@ class _LoginPageState extends ConsumerState<LoginPage>
       }
     });
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background gradient
-          Container(decoration: const BoxDecoration(gradient: _L.gBg)),
+    // ── FORCE English + LTR on this page only ──────────────────────────────
+    // The login/auth screen intentionally never follows the app's language
+    // setting. Localizations.override pins this subtree's locale to English
+    // (so GlobalMaterialLocalizations-driven widgets like text selection
+    // toolbars stay English too), and Directionality forces left-to-right
+    // layout so icons/alignment never mirror even if the device or app-wide
+    // locale is Arabic.
+    return Localizations.override(
+      context: context,
+      locale: const Locale('en'),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Scaffold(
+          body: Stack(
+            children: [
+              // Background gradient
+              Container(decoration: const BoxDecoration(gradient: _L.gBg)),
 
-          // Decorative orbs (pixel-identical to original)
-          Positioned(
-            top: -100,
-            right: -80,
-            child: _Orb(size: 300, opacity: 0.03),
-          ),
-          Positioned(
-            top: 70,
-            right: 40,
-            child: _OrbRing(size: 120, opacity: 0.06),
-          ),
-          Positioned(
-            bottom: -120,
-            left: -80,
-            child: Container(
-              width: 360,
-              height: 360,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF004D40).withOpacity(0.18),
+              // Decorative orbs (pixel-identical to original)
+              Positioned(
+                top: -100,
+                right: -80,
+                child: _Orb(size: 300, opacity: 0.03),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: 60,
-            left: 30,
-            child: _OrbRing(size: 80, opacity: 0.08),
-          ),
-
-          // Main content
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 24,
+              Positioned(
+                top: 70,
+                right: 40,
+                child: _OrbRing(size: 120, opacity: 0.06),
+              ),
+              Positioned(
+                bottom: -120,
+                left: -80,
+                child: Container(
+                  width: 360,
+                  height: 360,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF004D40).withOpacity(0.18),
+                  ),
                 ),
-                child: FadeTransition(
-                  opacity: _fadeAnim,
-                  child: SlideTransition(
-                    position: _slideAnim,
-                    child: Column(
-                      children: [
-                        _buildHeader(),
-                        const SizedBox(height: 28),
-                        _buildCard(state),
-                      ],
+              ),
+              Positioned(
+                bottom: 60,
+                left: 30,
+                child: _OrbRing(size: 80, opacity: 0.08),
+              ),
+
+              // Main content
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
+                    child: FadeTransition(
+                      opacity: _fadeAnim,
+                      child: SlideTransition(
+                        position: _slideAnim,
+                        child: Column(
+                          children: [
+                            _buildHeader(),
+                            const SizedBox(height: 28),
+                            _buildCard(state),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ── Header (unchanged) ───────────────────────────────────────────────────
+  // ── Header (unchanged — always English) ──────────────────────────────────
 
   Widget _buildHeader() => Column(
     children: [
@@ -313,16 +335,22 @@ class _LoginPageState extends ConsumerState<LoginPage>
         width: 82,
         height: 82,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
           color: Colors.white.withOpacity(0.08),
+          shape: BoxShape.circle,
           border: Border.all(color: Colors.white.withOpacity(0.20), width: 1.5),
         ),
-        child: const Icon(
-          Icons.local_hospital_rounded,
-          color: Colors.white,
-          size: 40,
+        padding: const EdgeInsets.all(2),
+        child: Image.asset(
+          'assets/icon/app_icon3.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(
+            Icons.local_hospital_rounded,
+            color: Colors.white,
+            size: 40,
+          ),
         ),
       ),
+
       const SizedBox(height: 18),
       const Text(
         'Hakim',
@@ -559,28 +587,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
               ),
             ),
           ],
-
-          // ── Forgot password ──────────────────────────────────────────
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () {},
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text(
-                'Forgot password?',
-                style: TextStyle(
-                  color: _L.navy,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-
           const SizedBox(height: 16),
 
           // ── Sign In button (loading driven by AuthState.isLoading) ────

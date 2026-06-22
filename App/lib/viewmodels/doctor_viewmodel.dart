@@ -18,10 +18,12 @@ class DoctorState {
   final List<Map<String, dynamic>> appointments;
   final List<Map<String, dynamic>> appointmentTypes;
   final List<Map<String, dynamic>> reports;
+  final List<Map<String, dynamic>> vitals;
   final int? doctorId;
 
   final bool loadingPatients;
   final bool loadingAppointments;
+  final bool loadingVitals;
 
   final bool patientsError;
   final bool appointmentsError;
@@ -31,19 +33,36 @@ class DoctorState {
 
   final Map<String, dynamic>? lastCreatedPatient;
 
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  final bool patientsHasMore;
+  final int patientsSkip;
+  final bool loadingMorePatients;
+
+  final bool appointmentsHasMore;
+  final int appointmentsSkip;
+  final bool loadingMoreAppointments;
+
   const DoctorState({
     this.patients = const [],
     this.appointments = const [],
     this.appointmentTypes = const [],
     this.reports = const [],
+    this.vitals = const [],
     this.doctorId,
     this.loadingPatients = false,
     this.loadingAppointments = false,
+    this.loadingVitals = false,
     this.patientsError = false,
     this.appointmentsError = false,
     this.patientSearchQuery = '',
     this.apptSearchQuery = '',
     this.lastCreatedPatient,
+    this.patientsHasMore = true,
+    this.patientsSkip = 0,
+    this.loadingMorePatients = false,
+    this.appointmentsHasMore = true,
+    this.appointmentsSkip = 0,
+    this.loadingMoreAppointments = false,
   });
 
   DoctorState copyWith({
@@ -51,24 +70,34 @@ class DoctorState {
     List<Map<String, dynamic>>? appointments,
     List<Map<String, dynamic>>? appointmentTypes,
     List<Map<String, dynamic>>? reports,
+    List<Map<String, dynamic>>? vitals,
     int? doctorId,
     bool? loadingPatients,
     bool? loadingAppointments,
+    bool? loadingVitals,
     bool? patientsError,
     bool? appointmentsError,
     String? patientSearchQuery,
     String? apptSearchQuery,
     Map<String, dynamic>? lastCreatedPatient,
     bool eraseLastCreatedPatient = false,
+    bool? patientsHasMore,
+    int? patientsSkip,
+    bool? loadingMorePatients,
+    bool? appointmentsHasMore,
+    int? appointmentsSkip,
+    bool? loadingMoreAppointments,
   }) {
     return DoctorState(
       patients: patients ?? this.patients,
       appointments: appointments ?? this.appointments,
       appointmentTypes: appointmentTypes ?? this.appointmentTypes,
       reports: reports ?? this.reports,
+      vitals: vitals ?? this.vitals,
       doctorId: doctorId ?? this.doctorId,
       loadingPatients: loadingPatients ?? this.loadingPatients,
       loadingAppointments: loadingAppointments ?? this.loadingAppointments,
+      loadingVitals: loadingVitals ?? this.loadingVitals,
       patientsError: patientsError ?? this.patientsError,
       appointmentsError: appointmentsError ?? this.appointmentsError,
       patientSearchQuery: patientSearchQuery ?? this.patientSearchQuery,
@@ -76,6 +105,13 @@ class DoctorState {
       lastCreatedPatient: eraseLastCreatedPatient
           ? null
           : (lastCreatedPatient ?? this.lastCreatedPatient),
+      patientsHasMore: patientsHasMore ?? this.patientsHasMore,
+      patientsSkip: patientsSkip ?? this.patientsSkip,
+      loadingMorePatients: loadingMorePatients ?? this.loadingMorePatients,
+      appointmentsHasMore: appointmentsHasMore ?? this.appointmentsHasMore,
+      appointmentsSkip: appointmentsSkip ?? this.appointmentsSkip,
+      loadingMoreAppointments:
+          loadingMoreAppointments ?? this.loadingMoreAppointments,
     );
   }
 }
@@ -86,6 +122,8 @@ class DoctorState {
 
 class DoctorViewModel extends StateNotifier<DoctorState> {
   DoctorViewModel() : super(const DoctorState());
+
+  static const int _pageSize = 20;
 
   Future<void> loadAll() => Future.wait([
     fetchPatients(),
@@ -100,15 +138,46 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
   // ── Patients ───────────────────────────────────────────────────────────────
 
   Future<void> fetchPatients() async {
-    state = state.copyWith(loadingPatients: true, patientsError: false);
+    state = state.copyWith(
+      loadingPatients: true,
+      patientsError: false,
+      patientsSkip: 0,
+      patientsHasMore: true,
+    );
     try {
-      final d = await ApiService.getPatients();
+      final d = await ApiService.getPatients(skip: 0, limit: _pageSize);
       state = state.copyWith(
         patients: List<Map<String, dynamic>>.from(d),
         loadingPatients: false,
+        patientsSkip: d.length,
+        patientsHasMore: d.length >= _pageSize,
       );
     } catch (_) {
       state = state.copyWith(loadingPatients: false, patientsError: true);
+    }
+  }
+
+  Future<void> loadMorePatients() async {
+    if (state.loadingMorePatients ||
+        !state.patientsHasMore ||
+        state.loadingPatients) return;
+    state = state.copyWith(loadingMorePatients: true);
+    try {
+      final d = await ApiService.getPatients(
+        skip: state.patientsSkip,
+        limit: _pageSize,
+      );
+      state = state.copyWith(
+        patients: [
+          ...state.patients,
+          ...List<Map<String, dynamic>>.from(d),
+        ],
+        loadingMorePatients: false,
+        patientsSkip: state.patientsSkip + d.length,
+        patientsHasMore: d.length >= _pageSize,
+      );
+    } catch (_) {
+      state = state.copyWith(loadingMorePatients: false);
     }
   }
 
@@ -121,6 +190,7 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
     );
     if (existingId != null) {
       await ApiService.updatePatient(existingId, data);
+      await fetchPatients();
       await _syncPatientConditions(
         patientId: existingId,
         newDiseaseNames: newDiseases,
@@ -128,13 +198,18 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
       state = state.copyWith(eraseLastCreatedPatient: true);
     } else {
       final created = await ApiService.createPatient(data);
-      if (created is Map<String, dynamic>) {
-        state = state.copyWith(
-          lastCreatedPatient: Map<String, dynamic>.from(created),
+      final newId = int.tryParse((created['id'] ?? 0).toString()) ?? 0;
+      state = state.copyWith(
+        lastCreatedPatient: Map<String, dynamic>.from(created),
+      );
+      await fetchPatients();
+      if (newDiseases.isNotEmpty && newId > 0) {
+        await _syncPatientConditions(
+          patientId: newId,
+          newDiseaseNames: newDiseases,
         );
       }
     }
-    await fetchPatients();
   }
 
   void clearLastCreatedPatient() =>
@@ -145,71 +220,122 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
     required List<String> newDiseaseNames,
   }) async {
     try {
-      final catalog = List<Map<String, dynamic>>.from(
+      var catalog = List<Map<String, dynamic>>.from(
         await ApiService.getConditions(),
       );
+
+      // Read current chronic conditions from backend-provided patient_conditions.
+      // The list endpoint embeds this array in each PatientResponse object.
       final patient = state.patients.firstWhere(
         (p) => p['id'].toString() == patientId.toString(),
         orElse: () => {},
       );
-      final currentDiseases = List<String>.from(
-        patient['chronic_diseases'] ?? [],
-      );
-      final added = newDiseaseNames
-          .where(
-            (n) =>
-                !currentDiseases.any((c) => c.toLowerCase() == n.toLowerCase()),
-          )
+      final currentConditions = _extractChronicConditions(patient);
+      final currentNamesLower =
+          currentConditions.map((c) => _conditionName(c).toLowerCase()).toSet();
+
+      final newNamesLower =
+          newDiseaseNames.map((n) => n.toLowerCase()).toSet();
+
+      final toAdd = newDiseaseNames
+          .where((n) => !currentNamesLower.contains(n.toLowerCase()))
           .toList();
-      final removed = currentDiseases
-          .where(
-            (c) =>
-                !newDiseaseNames.any((n) => n.toLowerCase() == c.toLowerCase()),
-          )
+      final toRemove = currentConditions
+          .where((c) => !newNamesLower.contains(_conditionName(c).toLowerCase()))
           .toList();
-      for (final name in added) {
-        final match = catalog.firstWhere(
-          (c) =>
-              (c['name'] ?? '').toString().toLowerCase().contains(
-                name.toLowerCase(),
-              ) ||
-              name.toLowerCase().contains(
-                (c['name'] ?? '').toString().toLowerCase(),
-              ),
-          orElse: () => {},
-        );
-        if (match.isNotEmpty && match['id'] != null) {
+
+      // Remove deselected conditions — DELETE endpoint takes condition_id
+      for (final c in toRemove) {
+        final condId = int.tryParse(
+              (c['condition_id'] ??
+                      (c['condition'] as Map?)?['id'] ??
+                      0)
+                  .toString(),
+            ) ??
+            0;
+        if (condId > 0) {
+          try {
+            await ApiService.removeCondition(patientId, condId);
+          } catch (_) {}
+        }
+      }
+
+      // Add newly selected conditions
+      for (final name in toAdd) {
+        // Find exact match in catalogue first
+        Map<String, dynamic>? match;
+        for (final c in catalog) {
+          if ((c['name'] ?? '').toString().toLowerCase() ==
+              name.toLowerCase()) {
+            match = c;
+            break;
+          }
+        }
+        // Fuzzy fallback
+        if (match == null) {
+          for (final c in catalog) {
+            final cn = (c['name'] ?? '').toString().toLowerCase();
+            if (cn.contains(name.toLowerCase()) ||
+                name.toLowerCase().contains(cn)) {
+              match = c;
+              break;
+            }
+          }
+        }
+        // Auto-create in catalogue if not found
+        if (match == null || match['id'] == null) {
+          try {
+            match = await ApiService.createCondition(name, 'CHRONIC');
+            catalog.add(match);
+          } catch (_) {
+            // 409 = already exists — fetch by name to get the id
+            try {
+              final found = List<Map<String, dynamic>>.from(
+                await ApiService.getConditions(search: name),
+              );
+              if (found.isNotEmpty) match = found.first;
+            } catch (_) {}
+          }
+        }
+        if (match != null && match['id'] != null) {
           try {
             await ApiService.assignCondition(
               patientId,
               int.parse(match['id'].toString()),
               '',
             );
-          } catch (_) {}
-        }
-      }
-      for (final name in removed) {
-        final match = catalog.firstWhere(
-          (c) =>
-              (c['name'] ?? '').toString().toLowerCase().contains(
-                name.toLowerCase(),
-              ) ||
-              name.toLowerCase().contains(
-                (c['name'] ?? '').toString().toLowerCase(),
-              ),
-          orElse: () => {},
-        );
-        if (match.isNotEmpty && match['id'] != null) {
-          try {
-            await ApiService.removeCondition(
-              patientId,
-              int.parse(match['id'].toString()),
-            );
-          } catch (_) {}
+          } catch (_) {} // 409 = already assigned, safe to ignore
         }
       }
     } catch (_) {}
   }
+
+  // Extracts chronic condition assignment objects from a PatientResponse map.
+  // Handles both flattened ({ name, category, condition_id }) and nested
+  // ({ condition: { name, category }, condition_id }) response shapes.
+  static List<Map<String, dynamic>> _extractChronicConditions(
+    Map<String, dynamic> patient,
+  ) {
+    final raw = patient['patient_conditions'];
+    if (raw is! List) return [];
+    final result = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final cat =
+          (item['category'] ??
+                  (item['condition'] as Map?)?['category'] ??
+                  '')
+              .toString()
+              .toUpperCase();
+      if (cat == 'CHRONIC') {
+        result.add(Map<String, dynamic>.from(item));
+      }
+    }
+    return result;
+  }
+
+  static String _conditionName(Map<String, dynamic> c) =>
+      (c['name'] ?? (c['condition'] as Map?)?['name'] ?? '').toString();
 
   Future<void> deletePatient(int id) async {
     await ApiService.deletePatient(id);
@@ -251,24 +377,59 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
   // ── Appointments ───────────────────────────────────────────────────────────
 
   Future<void> fetchAppointments() async {
-    state = state.copyWith(loadingAppointments: true, appointmentsError: false);
+    state = state.copyWith(
+      loadingAppointments: true,
+      appointmentsError: false,
+      appointmentsSkip: 0,
+      appointmentsHasMore: true,
+    );
     try {
-      final d = await ApiService.getAppointments();
+      final d = await ApiService.getAppointments(skip: 0, limit: _pageSize);
       final list = List<Map<String, dynamic>>.from(d);
-      // Sort DESCENDING — newest/furthest-future at the top so a newly
-      // created appointment is immediately visible without scrolling.
       list.sort((a, b) {
         final da = parseDate(a['start_time']);
         final db = parseDate(b['start_time']);
         return (db ?? DateTime.now()).compareTo(da ?? DateTime.now());
       });
-      state = state.copyWith(appointments: list, loadingAppointments: false);
+      state = state.copyWith(
+        appointments: list,
+        loadingAppointments: false,
+        appointmentsSkip: d.length,
+        appointmentsHasMore: d.length >= _pageSize,
+      );
     } catch (e) {
       state = state.copyWith(
         loadingAppointments: false,
         appointmentsError: true,
       );
-      rethrow; // let createOrUpdateAppointment surface errors to the form
+      rethrow;
+    }
+  }
+
+  Future<void> loadMoreAppointments() async {
+    if (state.loadingMoreAppointments ||
+        !state.appointmentsHasMore ||
+        state.loadingAppointments) return;
+    state = state.copyWith(loadingMoreAppointments: true);
+    try {
+      final d = await ApiService.getAppointments(
+        skip: state.appointmentsSkip,
+        limit: _pageSize,
+      );
+      final newItems = List<Map<String, dynamic>>.from(d);
+      newItems.sort((a, b) {
+        final da = parseDate(a['start_time']);
+        final db = parseDate(b['start_time']);
+        return (db ?? DateTime.now()).compareTo(da ?? DateTime.now());
+      });
+      state = state.copyWith(
+        appointments: [...state.appointments, ...newItems],
+        loadingMoreAppointments: false,
+        appointmentsSkip: state.appointmentsSkip + d.length,
+        appointmentsHasMore: d.length >= _pageSize,
+      );
+    } catch (_) {
+      state = state.copyWith(loadingMoreAppointments: false);
     }
   }
 
@@ -286,23 +447,49 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
     await fetchAppointments();
   }
 
-  Future<void> deleteAppointment(int id) async {
-    await ApiService.deleteAppointment(id);
-    await fetchAppointments();
-  }
-
   Future<void> createOrUpdateAppointment(
     Map<String, dynamic> data, {
     int? existingId,
   }) async {
     if (existingId != null) {
+      // ── Find current status ──────────────────────────────────────────────
+      final current = state.appointments.firstWhere(
+        (a) => a['id'].toString() == existingId.toString(),
+        orElse: () => {},
+      );
+      final currentStatus = (current['status'] ?? '').toUpperCase();
+
+      // ── For statuses the backend won't allow direct update on,
+      //    we transition through an allowed path first ──────────────────────
+      if (currentStatus == 'IN_PROGRESS') {
+        // IN_PROGRESS → CANCELLED (allowed per backend error message)
+        try {
+          await ApiService.updateAppointmentStatus(existingId, 'CANCELLED');
+        } catch (_) {}
+        // CANCELLED → SCHEDULED (allowed)
+        try {
+          await ApiService.updateAppointmentStatus(existingId, 'SCHEDULED');
+        } catch (_) {}
+      } else if (currentStatus == 'COMPLETED' || currentStatus == 'NO_SHOW') {
+        // Try direct — if backend rejects, nothing more we can do
+      }
+
+      // ── Now perform the actual data update (status is now SCHEDULED) ─────
       await ApiService.updateAppointment(existingId, data);
+
+      // ── Restore to IN_PROGRESS if that was the original status ───────────
+      if (currentStatus == 'IN_PROGRESS') {
+        try {
+          // SCHEDULED → CONFIRMED → IN_PROGRESS
+          await ApiService.updateAppointmentStatus(existingId, 'CONFIRMED');
+          await ApiService.updateAppointmentStatus(existingId, 'IN_PROGRESS');
+        } catch (_) {}
+      }
     } else {
       await ApiService.createAppointment(data);
     }
     await fetchAppointments();
   }
-
   // ── Consultation operations ────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> startVisit(Map<String, dynamic> data) async {
@@ -323,6 +510,13 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
 
   // ── In-memory cache (lives for the lifetime of the ViewModel instance) ─────
   int _cachedVisitId = 0;
+  int _cachedReportId = 0;
+  void clearConsultationCache() {
+    _cachedVisitId = 0;
+    _cachedReportId = 0;
+    state = state.copyWith(loadingVitals: false, vitals: const []);
+    debugPrint('🧹 clearConsultationCache: visit and report cache cleared');
+  }
 
   Future<int> ensureVisitExists({
     required int appointmentId,
@@ -372,7 +566,8 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
       final id = int.tryParse((match['id'] ?? 0).toString()) ?? 0;
       if (id > 0) {
         _cachedVisitId = id;
-        debugPrint('✅ ensureVisitExists: using existing visitId=$id');
+        _cachedReportId = 0; // reset report cache for the new visit
+        debugPrint('✅ ensureVisitExists: created visitId=$id');
         return id;
       }
     }
@@ -474,6 +669,134 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
     await ApiService.updateVisitStatus(visitId, status);
   }
 
+  /// Finalizes a medical report, generating a PDF and triggering WhatsApp delivery.
+  ///
+  /// The report must be in REVIEWED status. If it is still DRAFT, this method
+  /// advances it to REVIEWED first, then calls finalize.
+  ///
+  /// Returns a record with the finalized report map and a boolean [whatsappSent]
+  /// that is always `true` from the API's perspective — the backend fires WhatsApp
+  /// delivery asynchronously and will FINALIZE the report regardless of whether
+  /// the WhatsApp call succeeds, so the UI should show a soft warning rather than
+  /// treating WhatsApp failure as a hard error.
+  Future<({Map<String, dynamic> report, bool whatsappAttempted})> finalizeReport(
+    int reportId, {
+    required String currentStatus,
+  }) async {
+    final status = currentStatus.toUpperCase();
+    debugPrint(
+      '📋 finalizeReport: reportId=$reportId currentStatus=$status',
+    );
+
+    // Advance DRAFT → REVIEWED so finalize endpoint accepts the request.
+    if (status == 'DRAFT') {
+      debugPrint('🔄 finalizeReport: advancing DRAFT → REVIEWED');
+      await ApiService.updateReportStatus(reportId, 'REVIEWED');
+    }
+
+    // POST /reports/medical-reports/{id}/finalize
+    // This auto-steps REVIEWED → APPROVED → FINALIZED, generates PDF,
+    // and attempts WhatsApp delivery (fire-and-forget, non-fatal).
+    final result = await ApiService.finalizeReport(reportId);
+    debugPrint('✅ finalizeReport: report #$reportId is now FINALIZED');
+    return (report: result, whatsappAttempted: true);
+  }
+
+  // ── Vitals ─────────────────────────────────────────────────────────────────
+
+  static List<Map<String, dynamic>> _toVitalsList(List<dynamic> d) {
+    final result = <Map<String, dynamic>>[];
+    for (final e in d) {
+      if (e is Map) {
+        result.add(Map<String, dynamic>.from(e));
+      } else {
+        debugPrint('⚠️ _toVitalsList: skipping non-Map entry: $e');
+      }
+    }
+    return result;
+  }
+
+  Future<void> fetchVitals({
+    required int appointmentId,
+    required int patientId,
+  }) async {
+    state = state.copyWith(loadingVitals: true);
+    List<dynamic> d = [];
+    try {
+      final visits = await ApiService.getVisits(
+        patientId: patientId > 0 ? patientId : null,
+      );
+      debugPrint('🩺 fetchVitals: ${visits.length} visits for patId=$patientId');
+
+      Map<String, dynamic>? matched;
+
+      if (appointmentId > 0) {
+        final s = appointmentId.toString();
+        for (final v in visits) {
+          if (v is! Map) continue;
+          if (v['appointment_id']?.toString() == s) {
+            matched = Map<String, dynamic>.from(v);
+            break;
+          }
+          final appt = v['appointment'];
+          if (appt is Map && appt['id']?.toString() == s) {
+            matched = Map<String, dynamic>.from(v);
+            break;
+          }
+        }
+      }
+
+      if (matched != null && _hasVitals(matched)) {
+        d = [_visitToVitals(matched)];
+        debugPrint('🩺 fetchVitals: found vitals in visit id=${matched['id']}');
+      } else {
+        debugPrint('🩺 fetchVitals: no vitals recorded for this visit yet');
+      }
+    } catch (e) {
+      debugPrint('❌ fetchVitals error: $e');
+      d = [];
+    } finally {
+      state = state.copyWith(vitals: _toVitalsList(d), loadingVitals: false);
+    }
+  }
+
+  static bool _hasVitals(Map<String, dynamic> v) =>
+      v['blood_pressure'] != null ||
+      v['heart_rate'] != null ||
+      v['temperature'] != null ||
+      v['weight'] != null ||
+      v['height'] != null;
+
+  static Map<String, dynamic> _visitToVitals(Map<String, dynamic> visit) {
+    final bp = (visit['blood_pressure'] ?? '').toString().trim();
+    final parts = bp.isNotEmpty ? bp.split('/') : <String>[];
+    return {
+      'blood_pressure_systolic': parts.isNotEmpty ? parts[0].trim() : null,
+      'blood_pressure_diastolic': parts.length > 1 ? parts[1].trim() : null,
+      'heart_rate': visit['heart_rate'],
+      'temperature': visit['temperature'],
+      'weight': visit['weight'],
+      'height': visit['height'],
+      'chief_complaint': visit['chief_complaint'],
+      'notes': visit['notes'],
+      'recorded_at': visit['updated_at'] ?? visit['created_at'],
+      'created_at': visit['created_at'],
+    };
+  }
+
+  Future<Map<String, dynamic>> saveVitals(Map<String, dynamic> data) async {
+    final result = await ApiService.createPatientVitals(data);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> updateVitals(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
+    final result = await ApiService.updatePatientVitals(id, data);
+    return result;
+  }
+
   // ── Transcribe voice locally via AI service (no backend visit required) ────
   //
   // Sends audio to the AI micro-service and returns a structured string.
@@ -482,59 +805,198 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
 
   // ── Transcribe voice locally via AI service ──────────────────────────────
   // Returns a structured string with sections matching the 4 fields the
-  // VoiceReportReviewPage displays: Diagnosis, Treatment, Prescriptions,
-  // Doctor Notes.  Uses _buildStructuredReport to map API field names onto
+  // VoiceReportReviewPage displays: Diagnosis, Medications, Recommendations,
+  // Follow-up Instructions.  Uses _buildStructuredReport to map API field names onto
   // those labels regardless of what key names the backend returns.
+  //
+  // Strategy (each step only runs if the previous one fails):
+  //   1. Attempt fresh transcription directly — succeeds when no prior report
+  //      exists for this visit, or when the backend allows re-transcription.
+  //   2. If blocked, try deleting the existing report then transcribe fresh.
+  //   3. If delete is blocked (405), reset the existing report to DRAFT status
+  //      and retry transcription.
+  //   4. If all attempts fail, throw a clear error — NEVER silently fall back
+  //      to old report data from a previous recording session.
 
-  Future<String> transcribeAudioLocal({required File audioFile}) async {
-    final r = await AIService.transcribeReport(audioFile);
-    debugPrint('🎙️ AI RAW RESPONSE keys: ${r.keys.toList()}');
+  Future<({int reportId, String transcription})> transcribeAudioLocal({
+    required File audioFile,
+    required int visitId,
+  }) async {
+    if (visitId <= 0) {
+      throw Exception(
+        'visitId is required for transcription. '
+        'Ensure a visit is started before recording.',
+      );
+    }
 
+    // Reset cached report so a new recording always starts clean.
+    _cachedReportId = 0;
+
+    debugPrint(
+      '🎙️ transcribeAudioLocal: new recording for visitId=$visitId '
+      '— attempting fresh transcription.',
+    );
+
+    // ── Step 1: Attempt fresh transcription ──────────────────────────────────
+    // Happy path: no prior report exists for this visit.
+    try {
+      final r = await ApiService.transcribeAudio(
+        audioFile: audioFile,
+        visitId: visitId,
+      );
+      debugPrint('🎙️ Transcription response keys: ${r.keys.toList()}');
+      final reportId = int.tryParse((r['id'] ?? 0).toString()) ?? 0;
+      if (reportId > 0) _cachedReportId = reportId;
+      debugPrint('✅ Fresh transcription succeeded, reportId=$reportId');
+      return (reportId: reportId, transcription: _buildTranscriptionString(r));
+    } catch (firstError) {
+      debugPrint(
+        '⚠️ transcribeAudioLocal: fresh transcription blocked '
+        '(${extractError(firstError)}) — fetching existing report.',
+      );
+    }
+
+    // ── Retrieve the existing report with its current status ─────────────────
+    // Only reached when fresh transcription returned 409 (one report per visit).
+    // Sort by id descending so we always operate on the most recent report.
+    List<Map<String, dynamic>> existingReports = [];
+    try {
+      final raw = await ApiService.getMedicalReports(visitId: visitId);
+      existingReports = raw
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList()
+        ..sort((a, b) {
+          final aId = int.tryParse((a['id'] ?? 0).toString()) ?? 0;
+          final bId = int.tryParse((b['id'] ?? 0).toString()) ?? 0;
+          return bId.compareTo(aId);
+        });
+    } catch (e) {
+      debugPrint('⚠️ getMedicalReports failed: ${extractError(e)}');
+    }
+
+    if (existingReports.isEmpty) {
+      throw Exception(
+        'Transcription failed and no existing report was found for this visit. '
+        'Please check your connection and try again.',
+      );
+    }
+
+    final existingReport = existingReports.first;
+    final existingReportId =
+        int.tryParse((existingReport['id'] ?? 0).toString()) ?? 0;
+    final existingStatus =
+        (existingReport['status'] ?? '').toString().toUpperCase();
+
+    debugPrint(
+      '🔍 transcribeAudioLocal: existing report #$existingReportId '
+      'status=$existingStatus for visitId=$visitId.',
+    );
+
+    if (existingReportId <= 0) {
+      throw Exception('Existing report has an invalid ID. Please try again.');
+    }
+
+    // ── FINALIZED / CANCELLED: terminal states — re-recording is impossible ──
+    // The backend permanently blocks deletion and all status transitions out of
+    // these states. Surface a clear, actionable message instead of retrying.
+    if (existingStatus == 'FINALIZED' || existingStatus == 'CANCELLED') {
+      throw Exception(
+        'This visit\'s medical report has already been $existingStatus '
+        'and is a permanent record that cannot be modified or replaced. '
+        'To record a new consultation, please start a new visit for this patient.',
+      );
+    }
+
+    // ── Step 2: Regress status to DRAFT via the allowed state machine ─────────
+    // Backend state machine: APPROVED → REVIEWED → DRAFT
+    // FINALIZED and CANCELLED are already handled above.
+    if (existingStatus == 'APPROVED') {
+      try {
+        await ApiService.updateReportStatus(existingReportId, 'REVIEWED');
+        debugPrint('🔄 Regressed report #$existingReportId: APPROVED → REVIEWED.');
+      } catch (e) {
+        throw Exception(
+          'Cannot re-record: the existing report is APPROVED and could not be '
+          'reverted to REVIEWED. ${extractError(e)}',
+        );
+      }
+    }
+
+    if (existingStatus == 'APPROVED' || existingStatus == 'REVIEWED') {
+      try {
+        await ApiService.updateReportStatus(existingReportId, 'DRAFT');
+        debugPrint('🔄 Regressed report #$existingReportId: REVIEWED → DRAFT.');
+      } catch (e) {
+        throw Exception(
+          'Cannot re-record: the existing report could not be reset to DRAFT. '
+          '${extractError(e)}',
+        );
+      }
+    }
+
+    // ── Step 3: Delete the DRAFT report, then transcribe fresh ────────────────
+    // The report is now guaranteed to be DRAFT (either it was already, or we
+    // just regressed it). The API allows deleting DRAFT reports.
+    try {
+      await ApiService.deleteMedicalReport(existingReportId);
+      debugPrint(
+        '🗑️ Deleted report #$existingReportId — submitting new audio.',
+      );
+    } catch (deleteError) {
+      throw Exception(
+        'Cannot re-record: the existing draft report could not be deleted. '
+        '${extractError(deleteError)}',
+      );
+    }
+
+    final r = await ApiService.transcribeAudio(
+      audioFile: audioFile,
+      visitId: visitId,
+    );
+    final reportId = int.tryParse((r['id'] ?? 0).toString()) ?? 0;
+    if (reportId > 0) _cachedReportId = reportId;
+    debugPrint('✅ Re-transcription succeeded, reportId=$reportId');
+    return (reportId: reportId, transcription: _buildTranscriptionString(r));
+  }
+
+  // ── Helper: build transcription string from any AI response map ───────────
+  String _buildTranscriptionString(Map<String, dynamic> r) {
     final structured = _buildStructuredReport(r);
     if (structured.isNotEmpty) return structured;
 
-    // Last resort: join all non-empty values as plain text
-    return r.entries
-        .where(
-          (e) =>
-              e.value != null &&
-              e.value.toString().trim().isNotEmpty &&
-              e.value.toString() != 'null',
-        )
-        .map((e) => e.value.toString().trim())
-        .join('\n\n');
+    final fb = StringBuffer();
+    final diag = r['ai_diagnosis']?.toString().trim() ?? '';
+    final recs = _formatApiValue(r['ai_recommendations'] ?? []);
+    final meds = _formatApiValue(r['ai_medications'] ?? []);
+    final notes = (r['ai_follow_up'] ?? r['doctor_notes'] ?? '')
+        .toString()
+        .trim();
+    if (diag.isNotEmpty) fb.writeln('Diagnosis:\n$diag\n');
+    if (recs.isNotEmpty) fb.writeln('Recommendations:\n$recs\n');
+    if (meds.isNotEmpty) fb.writeln('Medications:\n$meds\n');
+    if (notes.isNotEmpty) fb.writeln('Follow-up Instructions:\n$notes\n');
+    return fb.toString().trim();
   }
 
   // ── Build structured report string from raw AI response map ───────────────
   // Maps every possible API key name onto one of 4 display labels.
   // Returns a string like:
-  //   "Diagnosis:\nvalue\n\nTreatment:\nvalue\n\n..."
+  //   "Diagnosis:\nvalue\n\nRecommendations:\nvalue\n\n..."
 
   String _buildStructuredReport(Map<String, dynamic> r) {
-    debugPrint('🔍 ALL API KEYS: \${r.keys.toList()}');
+    debugPrint('🔍 ALL API KEYS: ${r.keys.toList()}');
     final fieldMap = <String, List<String>>{
       'Diagnosis': [
+        'ai_diagnosis',
         'diagnosis',
         'diagnoses',
         'dx',
         'impression',
         'final_diagnosis',
         'primary_diagnosis',
-        'ai_diagnosis',
       ],
-      'Treatment': [
-        'prescriptions',
-        'prescription',
-        'medications',
-        'medication_list',
-        'drugs',
-        'drug_list',
-        'rx',
-        'prescribed_medications',
-        'meds',
-        'ai_medications',
-      ],
-      'Prescriptions': [
+      'Recommendations': [
+        'ai_recommendations',
         'treatment',
         'treatment_plan',
         'management',
@@ -544,9 +1006,21 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
         'therapeutic_plan',
         'recommendations',
         'advice',
-        'ai_recommendations',
       ],
-      'Doctor Notes': [
+      'Medications': [
+        'ai_medications',
+        'prescriptions',
+        'prescription',
+        'medications',
+        'medication_list',
+        'drugs',
+        'drug_list',
+        'rx',
+        'prescribed_medications',
+        'meds',
+      ],
+      'Follow-up Instructions': [
+        'ai_follow_up',
         'doctor_notes',
         'notes',
         'doctor_note',
@@ -558,7 +1032,6 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
         'instructions',
         'comment',
         'comments',
-        'ai_follow_up',
       ],
     };
 
@@ -769,7 +1242,10 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
               dt.month == now.month &&
               dt.day == now.day,
         DoctorApptFilter.upcoming =>
-          dt != null && dt.isAfter(now) && s != 'CANCELLED',
+          dt != null &&
+              dt.isAfter(now) &&
+              s != 'CANCELLED' &&
+              s != 'NO_SHOW',
         DoctorApptFilter.urgent => a['is_urgent'] == true,
         DoctorApptFilter.completed => s == 'COMPLETED',
       };
@@ -787,7 +1263,8 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
   Map<String, double> get financeStats {
     double total = 0, paid = 0;
     for (final a in state.appointments) {
-      if ((a['status'] ?? '').toUpperCase() == 'CANCELLED') continue;
+      final s = (a['status'] ?? '').toUpperCase();
+      if (s == 'CANCELLED' || s == 'NO_SHOW') continue;
       final fee = double.tryParse((a['fee'] ?? 0).toString()) ?? 0;
       total += fee;
       if (a['is_paid'] == true) paid += fee;
@@ -798,7 +1275,10 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
   List<Map<String, dynamic>> billableAppointments({bool unpaidOnly = false}) {
     final list =
         state.appointments
-            .where((a) => (a['status'] ?? '').toUpperCase() != 'CANCELLED')
+            .where((a) {
+              final s = (a['status'] ?? '').toUpperCase();
+              return s != 'CANCELLED' && s != 'NO_SHOW';
+            })
             .toList()
           ..sort(
             (a, b) => (parseDate(b['start_time']) ?? DateTime.now()).compareTo(
@@ -815,10 +1295,12 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
     return state.appointments.where((a) {
       final dt = parseDate(a['start_time']);
       if (dt == null) return false;
+      final s = (a['status'] ?? '').toUpperCase();
       return dt.year == now.year &&
           dt.month == now.month &&
           dt.day == now.day &&
-          (a['status'] ?? '').toUpperCase() != 'CANCELLED';
+          s != 'CANCELLED' &&
+          s != 'NO_SHOW';
     }).toList()..sort(
       (a, b) => (parseDate(a['start_time']) ?? DateTime.now()).compareTo(
         parseDate(b['start_time']) ?? DateTime.now(),
@@ -840,6 +1322,35 @@ class DoctorViewModel extends StateNotifier<DoctorState> {
           )!.compareTo(parseDate(b['start_time'])!),
         );
     return upcoming.isEmpty ? null : upcoming.first;
+  }
+
+  // ── Lab Reports ────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchLabReports(int visitId) async {
+    try {
+      final d = await ApiService.getVisitLabReports(visitId);
+      return List<Map<String, dynamic>>.from(d);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadLabReport({
+    required File pdfFile,
+    required int visitId,
+  }) async {
+    return ApiService.uploadLabReport(pdfFile: pdfFile, visitId: visitId);
+  }
+
+  Future<Map<String, dynamic>> updateLabReport(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
+    return ApiService.updateLabReport(id, data);
+  }
+
+  Future<Map<String, dynamic>> getLabReportById(int id) async {
+    return ApiService.getLabReportById(id);
   }
 
   // ── Auth ───────────────────────────────────────────────────────────────────

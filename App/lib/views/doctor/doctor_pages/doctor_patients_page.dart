@@ -2,6 +2,7 @@
 // lib/views/doctor/doctor_patients_page.dart
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/views/doctor/doctor_pages/doctor_patient_detail.dart';
 import 'package:flutter/material.dart';
@@ -27,11 +28,28 @@ class DoctorPatientsPage extends ConsumerStatefulWidget {
 
 class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      ref.read(doctorViewModelProvider.notifier).loadMorePatients();
+    }
   }
 
   void _snack(String msg, {bool err = false}) {
@@ -49,6 +67,8 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     final state = ref.watch(doctorViewModelProvider);
     final vm = ref.read(doctorViewModelProvider.notifier);
     final loading = state.loadingPatients;
@@ -56,14 +76,17 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
     final list = vm.filteredPatients;
 
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: dt.bgPage,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddSheet(context, vm),
         backgroundColor: _T.navy,
         icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text(
-          'Add Patient',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        label: Text(
+          loc.addPatient,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: Column(
@@ -73,13 +96,10 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: TextField(
               controller: _searchCtrl,
-              decoration: _T.inp(
-                'Search by name, phone, or national ID...',
-                pre: const Icon(
-                  Icons.search_rounded,
-                  size: 20,
-                  color: _T.textM,
-                ),
+              decoration: _T.inpOf(
+                context,
+                loc.searchPatientFull,
+                pre: Icon(Icons.search_rounded, size: 20, color: dt.textM),
                 suf: q.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 18),
@@ -98,18 +118,18 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
             child: Row(
               children: [
                 Text(
-                  '${state.patients.length} patients total',
-                  style: const TextStyle(
+                  loc.patientsTotalCount(state.patients.length),
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: _T.textM,
+                    color: dt.textM,
                     letterSpacing: 0.5,
                   ),
                 ),
                 if (q.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Text(
-                    '• ${list.length} results',
+                    '• ${loc.resultsCount(list.length)}',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -125,7 +145,7 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
             child: RefreshIndicator(
               onRefresh: vm.fetchPatients,
               color: _T.navy,
-              child: _buildList(loading, list, vm),
+              child: _buildList(loading, list, vm, loc),
             ),
           ),
         ],
@@ -137,32 +157,72 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
     bool loading,
     List<Map<String, dynamic>> list,
     DoctorViewModel vm,
+    AppLocalizations loc,
   ) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final state = ref.watch(doctorViewModelProvider);
+
     if (loading) {
       return const Center(
         child: CircularProgressIndicator(color: _T.navy, strokeWidth: 2),
       );
     }
     if (list.isEmpty) {
-      return const DoctorEmpty(
+      return DoctorEmpty(
         icon: Icons.people_outline_rounded,
-        title: 'No patients found',
-        sub: 'Try a different search or add a new patient.',
+        title: loc.noPatientsFound,
+        sub: loc.noPatientsFoundSub,
       );
     }
-    return ListView.separated(
+
+    final showFooter =
+        state.loadingMorePatients || !state.patientsHasMore;
+
+    return ListView.builder(
+      controller: _scrollCtrl,
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) => DoctorPatCard(
-        patient: list[i],
-        onTap: () {
-          final pid = int.tryParse((list[i]['id'] ?? '').toString()) ?? 0;
-          if (pid > 0) vm.fetchReports(pid);
-          _openDetail(list[i], vm);
-        },
-        onEdit: () => _showEditSheet(list[i], vm),
-      ),
+      itemCount: list.length + (showFooter ? 1 : 0),
+      itemBuilder: (_, i) {
+        if (i == list.length) {
+          if (state.loadingMorePatients) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: _T.navy,
+                  strokeWidth: 2,
+                ),
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text(
+                loc.endOfResults,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: dt.textM,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          );
+        }
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < list.length - 1 ? 10 : 0),
+          child: DoctorPatCard(
+            patient: list[i],
+            onTap: () {
+              final pid =
+                  int.tryParse((list[i]['id'] ?? '').toString()) ?? 0;
+              if (pid > 0) vm.fetchReports(pid);
+              _openDetail(list[i], vm);
+            },
+            onEdit: () => _showEditSheet(list[i], vm),
+          ),
+        );
+      },
     );
   }
 
@@ -209,6 +269,7 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
   ) async {
     if (!mounted) return;
     final state = ref.read(doctorViewModelProvider);
+    final loc = AppLocalizations.of(context)!;
     final booked = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -218,13 +279,14 @@ class _DoctorPatientsPageState extends ConsumerState<DoctorPatientsPage> {
         patients: state.patients,
         types: state.appointmentTypes,
         doctorId: int.parse(widget.doctorProfile.id),
+        existingAppointments: state.appointments,
         onSubmit: (data, {existingId}) =>
             vm.createOrUpdateAppointment(data, existingId: existingId),
         snack: _snack,
       ),
     );
     if (booked == true && mounted) {
-      _snack('Appointment booked successfully!');
+      _snack(loc.appointmentBookedSuccess);
     }
   }
 

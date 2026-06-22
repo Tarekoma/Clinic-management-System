@@ -1,10 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/widgets/doctor/doctor_appt_form.dart
+// Localized via AppLocalizations.
+//
+// CHANGES IN THIS VERSION:
+//   • Visit-type card fee labels ('100 EGP' / '300 EGP') now use
+//     loc.currencyEgp + arNumber() for Arabic-Indic digits + localized
+//     currency word.
+//   • Date & Time display row now passes locale to DateFormat and wraps
+//     the result in arDigits() so day/time digits localize too.
+//   • The editable Fee TextField itself is left untouched on purpose —
+//     converting typed input to Arabic-Indic digits would break
+//     double.tryParse() when reading the value back.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:Hakim/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 
@@ -24,8 +37,11 @@ class DoctorApptForm extends StatefulWidget {
 
   final void Function(String, {bool err}) snack;
 
-  // ── NEW: pre-select a patient when opening from the patients page ───────────
+  // ── pre-select a patient when opening from the patients page ───────────
   final Map<String, dynamic>? preSelectedPatient;
+
+  /// All existing appointments — used for client-side overlap detection.
+  final List<Map<String, dynamic>> existingAppointments;
 
   const DoctorApptForm({
     this.existing,
@@ -35,6 +51,7 @@ class DoctorApptForm extends StatefulWidget {
     required this.doctorId,
     required this.onSubmit,
     required this.snack,
+    this.existingAppointments = const [],
     Key? key,
   }) : super(key: key);
 
@@ -133,19 +150,43 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
     );
   }
 
+  bool _hasConflict(DateTime proposed) {
+    const window = Duration(minutes: 45);
+    final existingId = widget.existing != null
+        ? int.tryParse(widget.existing!['id'].toString())
+        : null;
+    for (final a in widget.existingAppointments) {
+      final status = (a['status'] ?? '').toString().toUpperCase();
+      if (status == 'CANCELLED' || status == 'NO_SHOW') continue;
+      final id = int.tryParse(a['id'].toString());
+      if (id != null && id == existingId) continue;
+      DateTime? start;
+      try {
+        start = DateTime.parse(a['start_time'].toString()).toLocal();
+      } catch (_) {
+        continue;
+      }
+      final diff = proposed.difference(start).abs();
+      if (diff < window) return true;
+    }
+    return false;
+  }
+
   Future<void> _save() async {
+    final loc = AppLocalizations.of(context)!;
     if (_patId == null) {
-      _snack('Please select a patient', err: true);
+      _snack(loc.pleaseSelectPatient, err: true);
       return;
     }
 
     final isNew = widget.existing == null;
     if (isNew || _dateChanged) {
       if (_date.isBefore(DateTime.now())) {
-        _snack(
-          'Appointment time must be in the future. Please pick a later time.',
-          err: true,
-        );
+        _snack(loc.appointmentTimeMustBeFuture, err: true);
+        return;
+      }
+      if (_hasConflict(_date)) {
+        _snack(loc.appointmentSlotConflict, err: true);
         return;
       }
     }
@@ -190,21 +231,6 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       // ── FIX: route API errors through the parent page's snack callback ────
-      //
-      // Using the internal _snack() here caused an unhandled exception:
-      //   'ScaffoldMessenger.showSnackBar called but no descendant Scaffold
-      //    found' (_scaffolds.isNotEmpty assertion).
-      //
-      // Root cause: when the backend returns 401, ApiService._handleUnauthorized
-      // fires _onUnauthorized() which navigates to LoginPage (removing all
-      // routes). The DioException then propagates back here. At this instant,
-      // `mounted` is still true (the frame hasn't settled), so the guard
-      // passes — but the Scaffold tree is already torn down.
-      //
-      // widget.snack is _snack from DoctorAppointmentsPage, whose `mounted`
-      // check is tied to the PAGE's lifecycle. Once pushAndRemoveUntil
-      // executes, the page is unmounted and the callback returns early safely.
-      // ─────────────────────────────────────────────────────────────────────
       widget.snack(e.toString(), err: true);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -227,6 +253,7 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
   }
 
   Future<void> _pickDate() async {
+    final loc = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final d = await showDatePicker(
       context: context,
@@ -252,10 +279,7 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
     if (t == null || !mounted) return;
     final picked = DateTime(d.year, d.month, d.day, t.hour, t.minute);
     if (picked.isBefore(now)) {
-      _snack(
-        'Selected time is in the past. Please choose a future time.',
-        err: true,
-      );
+      _snack(loc.selectedTimeInPast, err: true);
       return;
     }
     setState(() {
@@ -266,9 +290,12 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final localeCode = Localizations.localeOf(context).languageCode;
     return Container(
-      decoration: const BoxDecoration(
-        color: _T.bgCard,
+      decoration: BoxDecoration(
+        color: dt.bgCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -291,18 +318,20 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _T.divider,
+                  color: dt.divider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             const SizedBox(height: 20),
             Text(
-              widget.existing != null ? 'Edit Appointment' : 'New Appointment',
-              style: const TextStyle(
+              widget.existing != null
+                  ? loc.editAppointmentTitle
+                  : loc.newAppointment,
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: _T.textH,
+                color: dt.textH,
               ),
             ),
             const SizedBox(height: 20),
@@ -319,12 +348,12 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
             const SizedBox(height: 14),
 
             // ── Visit Type Selector ──────────────────────────────────────────
-            const Text(
-              'Visit Type',
+            Text(
+              loc.visitType,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: _T.textS,
+                color: dt.textS,
               ),
             ),
             const SizedBox(height: 8),
@@ -345,12 +374,12 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                       decoration: BoxDecoration(
                         color: _visitType == 'consultation'
                             ? _T.navy
-                            : _T.bgInput,
+                            : dt.bgInput,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: _visitType == 'consultation'
                               ? _T.navy
-                              : _T.divider,
+                              : dt.divider,
                         ),
                         boxShadow: _visitType == 'consultation'
                             ? [
@@ -368,29 +397,30 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                             Icons.medical_services_rounded,
                             color: _visitType == 'consultation'
                                 ? Colors.white
-                                : _T.textM,
+                                : dt.textM,
                             size: 26,
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Consultation',
+                            loc.visitTypeConsultation,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: _visitType == 'consultation'
                                   ? Colors.white
-                                  : _T.textS,
+                                  : dt.textS,
                             ),
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '${_consultDefaultFee.toStringAsFixed(0)} EGP',
+                            // FIXED: was '${_consultDefaultFee.toStringAsFixed(0)} EGP'
+                            '${arNumber(_consultDefaultFee, localeCode)} ${loc.currencyEgp}',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: _visitType == 'consultation'
                                   ? Colors.white.withOpacity(0.75)
-                                  : _T.textM,
+                                  : dt.textM,
                             ),
                           ),
                         ],
@@ -412,10 +442,10 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                         horizontal: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: _visitType == 'revisit' ? _T.teal : _T.bgInput,
+                        color: _visitType == 'revisit' ? _T.teal : dt.bgInput,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: _visitType == 'revisit' ? _T.teal : _T.divider,
+                          color: _visitType == 'revisit' ? _T.teal : dt.divider,
                         ),
                         boxShadow: _visitType == 'revisit'
                             ? [
@@ -433,29 +463,30 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                             Icons.refresh_rounded,
                             color: _visitType == 'revisit'
                                 ? Colors.white
-                                : _T.textM,
+                                : dt.textM,
                             size: 26,
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Revisit',
+                            loc.visitTypeRevisit,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: _visitType == 'revisit'
                                   ? Colors.white
-                                  : _T.textS,
+                                  : dt.textS,
                             ),
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '${_revisitDefaultFee.toStringAsFixed(0)} EGP',
+                            // FIXED: was '${_revisitDefaultFee.toStringAsFixed(0)} EGP'
+                            '${arNumber(_revisitDefaultFee, localeCode)} ${loc.currencyEgp}',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: _visitType == 'revisit'
                                   ? Colors.white.withOpacity(0.75)
-                                  : _T.textM,
+                                  : dt.textM,
                             ),
                           ),
                         ],
@@ -468,18 +499,23 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
             const SizedBox(height: 14),
 
             // ── Fee ──────────────────────────────────────────────────────────
+            // NOTE: this TextField is intentionally left with plain Western
+            // digits — it's an editable numeric input parsed via
+            // double.tryParse(), which doesn't understand Arabic-Indic
+            // digits. Converting it would break saving the fee.
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _feeCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: _T.inp(
-                      'Fee (EGP)',
-                      pre: const Icon(
+                    decoration: _T.inpOf(
+                      context,
+                      loc.feeEgpLabel,
+                      pre: Icon(
                         Icons.payments_outlined,
                         size: 18,
-                        color: _T.textM,
+                        color: dt.textM,
                       ),
                       hint: _visitType == 'consultation'
                           ? _consultDefaultFee.toStringAsFixed(0)
@@ -497,14 +533,14 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: _T.bgInput,
+                      color: dt.bgInput,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _T.divider),
+                      border: Border.all(color: dt.divider),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.refresh_rounded,
                       size: 18,
-                      color: _T.textS,
+                      color: dt.textS,
                     ),
                   ),
                 ),
@@ -516,17 +552,23 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
             GestureDetector(
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: _T.inp(
-                  'Date & Time',
-                  pre: const Icon(
-                    Icons.event_rounded,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.dateTimeLabel,
+                  pre: Icon(Icons.event_rounded, size: 18, color: dt.textM),
                 ),
                 child: Text(
-                  DateFormat('dd MMM yyyy  •  hh:mm a').format(_date),
-                  style: const TextStyle(fontSize: 13, color: _T.textH),
+                  // FIXED: was DateFormat('dd MMM yyyy  •  hh:mm a').format(_date)
+                  // with no locale arg — always English month name + Western
+                  // digits regardless of app language.
+                  arDigits(
+                    DateFormat(
+                      'dd MMM yyyy  •  hh:mm a',
+                      localeCode,
+                    ).format(_date),
+                    localeCode,
+                  ),
+                  style: TextStyle(fontSize: 13, color: dt.textH),
                 ),
               ),
             ),
@@ -536,7 +578,7 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
             TextField(
               controller: _reasonCtrl,
               maxLines: 2,
-              decoration: _T.inp('Reason / Notes (optional)'),
+              decoration: _T.inpOf(context, loc.reasonNotesOptional),
             ),
             const SizedBox(height: 14),
 
@@ -546,25 +588,25 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: _urgent ? _T.urgentBg : _T.bgInput,
+                  color: _urgent ? _T.urgentBg : dt.bgInput,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _urgent ? _T.urgent.withOpacity(0.4) : _T.divider,
+                    color: _urgent ? _T.urgent.withOpacity(0.4) : dt.divider,
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.warning_amber_rounded,
-                      color: _urgent ? _T.urgent : _T.textM,
+                      color: _urgent ? _T.urgent : dt.textM,
                       size: 20,
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      'Mark as Urgent',
+                      loc.markAsUrgent,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: _urgent ? _T.urgent : _T.textS,
+                        color: _urgent ? _T.urgent : dt.textS,
                       ),
                     ),
                     const Spacer(),
@@ -585,25 +627,25 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: _isPaid ? _T.successBg : _T.bgInput,
+                  color: _isPaid ? _T.successBg : dt.bgInput,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _isPaid ? _T.success.withOpacity(0.4) : _T.divider,
+                    color: _isPaid ? _T.success.withOpacity(0.4) : dt.divider,
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.payments_rounded,
-                      color: _isPaid ? _T.success : _T.textM,
+                      color: _isPaid ? _T.success : dt.textM,
                       size: 20,
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      'Mark as Paid',
+                      loc.markAsPaid,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: _isPaid ? _T.success : _T.textS,
+                        color: _isPaid ? _T.success : dt.textS,
                       ),
                     ),
                     const Spacer(),
@@ -643,8 +685,8 @@ class _DoctorApptFormState extends State<DoctorApptForm> {
                       )
                     : Text(
                         widget.existing != null
-                            ? 'Save Changes'
-                            : 'Book Appointment',
+                            ? loc.saveChanges
+                            : loc.bookAppointment,
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -665,7 +707,7 @@ class DoctorPatientSearchField extends StatefulWidget {
   final List<Map<String, dynamic>> patients;
   final int? selectedId;
   final void Function(int?) onSelected;
-  // ── NEW: lock field when patient is pre-selected ─────────────────────────────
+  // ── lock field when patient is pre-selected ─────────────────────────────
   final bool locked;
 
   const DoctorPatientSearchField({
@@ -756,6 +798,8 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -763,13 +807,10 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
           controller: _ctrl,
           // Read-only when a patient was pre-selected
           readOnly: widget.locked,
-          decoration: _T.inp(
-            'Search patient by name, phone or ID...',
-            pre: const Icon(
-              Icons.person_search_rounded,
-              size: 18,
-              color: _T.textM,
-            ),
+          decoration: _T.inpOf(
+            context,
+            loc.searchPatientNameFull,
+            pre: Icon(Icons.person_search_rounded, size: 18, color: dt.textM),
             suf: (!widget.locked && _ctrl.text.isNotEmpty)
                 ? IconButton(
                     icon: const Icon(Icons.clear_rounded, size: 18),
@@ -812,7 +853,7 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
                 if ((_selected!['phone'] ?? '').isNotEmpty)
                   Text(
                     _selected!['phone'],
-                    style: const TextStyle(fontSize: 11, color: _T.textS),
+                    style: TextStyle(fontSize: 11, color: dt.textS),
                   ),
               ],
             ),
@@ -823,9 +864,9 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
           Container(
             margin: const EdgeInsets.only(top: 4),
             decoration: BoxDecoration(
-              color: _T.bgCard,
+              color: dt.bgCard,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _T.divider),
+              border: Border.all(color: dt.divider),
               boxShadow: [
                 BoxShadow(
                   color: _T.navy.withOpacity(0.08),
@@ -836,11 +877,11 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
             ),
             constraints: const BoxConstraints(maxHeight: 220),
             child: _results.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Text(
-                      'No patients found',
-                      style: TextStyle(fontSize: 13, color: _T.textS),
+                      loc.noPatientsFoundShort,
+                      style: TextStyle(fontSize: 13, color: dt.textS),
                     ),
                   )
                 : ListView.separated(
@@ -848,7 +889,7 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     itemCount: _results.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: _T.divider),
+                        Divider(height: 1, color: dt.divider),
                     itemBuilder: (_, i) {
                       final p = _results[i];
                       final name =
@@ -873,10 +914,10 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
                                   children: [
                                     Text(
                                       name,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
-                                        color: _T.textH,
+                                        color: dt.textH,
                                       ),
                                     ),
                                     if (phone.isNotEmpty || nid.isNotEmpty)
@@ -884,17 +925,17 @@ class _DoctorPatientSearchFieldState extends State<DoctorPatientSearchField> {
                                         [phone, nid]
                                             .where((s) => s.isNotEmpty)
                                             .join('  •  '),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: _T.textS,
+                                          color: dt.textS,
                                         ),
                                       ),
                                   ],
                                 ),
                               ),
-                              const Icon(
+                              Icon(
                                 Icons.chevron_right_rounded,
-                                color: _T.textM,
+                                color: dt.textM,
                                 size: 18,
                               ),
                             ],

@@ -14,6 +14,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'package:Hakim/viewmodels/assistant_viewmodel.dart';
 
@@ -62,6 +64,8 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
   bool _saving = false;
   final _formKey = GlobalKey<FormState>();
 
+  // Canonical English keys — used for chronic_disease data storage/matching.
+  // Display labels are localized separately via _diseaseLabel().
   static const _commonDiseases = [
     'Diabetes',
     'Hypertension',
@@ -69,6 +73,23 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
     'Heart Disease',
     'Arthritis',
   ];
+
+  String _diseaseLabel(String key, AppLocalizations loc) {
+    switch (key) {
+      case 'Diabetes':
+        return loc.diseaseDiabetes;
+      case 'Hypertension':
+        return loc.diseaseHypertension;
+      case 'Asthma':
+        return loc.diseaseAsthma;
+      case 'Heart Disease':
+        return loc.diseaseHeartDisease;
+      case 'Arthritis':
+        return loc.diseaseArthritis;
+      default:
+        return key;
+    }
+  }
 
   @override
   void initState() {
@@ -86,9 +107,22 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
         final dob = e['birth_date'] ?? e['date_of_birth'];
         if (dob != null) _dob = DateTime.parse(dob.toString());
       } catch (_) {}
-      final chronic = (e['chronic_disease'] ?? '').toString();
-      for (final d in _commonDiseases) {
-        if (chronic.toLowerCase().contains(d.toLowerCase())) _diseases.add(d);
+      // Backend returns patient_conditions (array of condition objects).
+      // Extract names where category == CHRONIC.
+      final conditions = e['patient_conditions'];
+      if (conditions is List) {
+        for (final c in conditions) {
+          if (c is! Map) continue;
+          final cat =
+              (c['category'] ?? (c['condition'] as Map?)?['category'] ?? '')
+                  .toString()
+                  .toUpperCase();
+          if (cat != 'CHRONIC') continue;
+          final name =
+              (c['name'] ?? (c['condition'] as Map?)?['name'] ?? '')
+                  .toString();
+          if (name.isNotEmpty) _diseases.add(name);
+        }
       }
     }
   }
@@ -131,17 +165,18 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
       if (_nid.text.trim().isNotEmpty) 'national_id': _nid.text.trim(),
       if (_adr.text.trim().isNotEmpty) 'address': _adr.text.trim(),
       if (_dob != null) 'date_of_birth': DateFormat('yyyy-MM-dd').format(_dob!),
-      if (_diseases.isNotEmpty) 'chronic_disease': _diseases.join(', '),
+      'chronic_diseases': _diseases.toList(),
     };
     try {
       final existingId = widget.existing != null
           ? int.tryParse(widget.existing!['id'].toString())
           : null;
+      final loc = AppLocalizations.of(context)!;
       await widget.onSubmit(data, existingId: existingId);
       widget.snack(
         widget.existing != null
-            ? 'Patient updated successfully'
-            : 'Patient added successfully',
+            ? loc.patientUpdatedSuccess
+            : loc.patientAddedSuccess,
       );
       await widget.onSaved();
       if (mounted) Navigator.pop(context);
@@ -156,9 +191,11 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     return Container(
-      decoration: const BoxDecoration(
-        color: _T.bgCard,
+      decoration: BoxDecoration(
+        color: at.bgCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -183,18 +220,20 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: _T.divider,
+                    color: at.divider,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
               Text(
-                widget.existing != null ? 'Edit Patient' : 'Add New Patient',
-                style: const TextStyle(
+                widget.existing != null
+                    ? loc.editPatientTitle
+                    : loc.addNewPatientTitle,
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: _T.textH,
+                  color: at.textH,
                 ),
               ),
               const SizedBox(height: 20),
@@ -205,32 +244,36 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
                   Expanded(
                     child: TextFormField(
                       controller: _fn,
-                      decoration: _T.inp(
-                        'First Name *',
-                        pre: const Icon(
+                      decoration: _T.inpOf(
+                        context,
+                        '${loc.firstNameLabel} *',
+                        pre: Icon(
                           Icons.person_rounded,
                           size: 18,
-                          color: _T.textM,
+                          color: at.textM,
                         ),
                       ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? loc.requiredField
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
                       controller: _ln,
-                      decoration: _T.inp(
-                        'Last Name *',
-                        pre: const Icon(
+                      decoration: _T.inpOf(
+                        context,
+                        '${loc.lastNameLabel} *',
+                        pre: Icon(
                           Icons.person_outline_rounded,
                           size: 18,
-                          color: _T.textM,
+                          color: at.textM,
                         ),
                       ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? loc.requiredField
+                          : null,
                     ),
                   ),
                 ],
@@ -241,16 +284,13 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               TextFormField(
                 controller: _ph,
                 keyboardType: TextInputType.phone,
-                decoration: _T.inp(
-                  'Phone Number *',
-                  pre: const Icon(
-                    Icons.phone_rounded,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  '${loc.phoneNumberLabel} *',
+                  pre: Icon(Icons.phone_rounded, size: 18, color: at.textM),
                 ),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
+                    v == null || v.trim().isEmpty ? loc.requiredField : null,
               ),
               const SizedBox(height: 14),
 
@@ -258,17 +298,14 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               TextFormField(
                 controller: _em,
                 keyboardType: TextInputType.emailAddress,
-                decoration: _T.inp(
-                  'Email (optional)',
-                  pre: const Icon(
-                    Icons.email_rounded,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.emailOptionalLabel,
+                  pre: Icon(Icons.email_rounded, size: 18, color: at.textM),
                 ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
-                  if (!v.contains('@')) return 'Invalid email';
+                  if (!v.contains('@')) return loc.invalidEmail;
                   return null;
                 },
               ),
@@ -277,13 +314,10 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               // ── National ID ───────────────────────────────────────────────
               TextFormField(
                 controller: _nid,
-                decoration: _T.inp(
-                  'National ID (optional)',
-                  pre: const Icon(
-                    Icons.badge_outlined,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.nationalIdOptionalLabel,
+                  pre: Icon(Icons.badge_outlined, size: 18, color: at.textM),
                 ),
               ),
               const SizedBox(height: 14),
@@ -292,12 +326,13 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               TextFormField(
                 controller: _adr,
                 maxLines: 2,
-                decoration: _T.inp(
-                  'Address (optional)',
-                  pre: const Icon(
+                decoration: _T.inpOf(
+                  context,
+                  loc.addressOptionalLabel,
+                  pre: Icon(
                     Icons.location_on_outlined,
                     size: 18,
-                    color: _T.textM,
+                    color: at.textM,
                   ),
                 ),
               ),
@@ -306,20 +341,20 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               // ── Gender toggle ─────────────────────────────────────────────
               Row(
                 children: [
-                  const Text(
-                    'Gender: ',
-                    style: TextStyle(fontSize: 13, color: _T.textS),
+                  Text(
+                    loc.genderColonLabel,
+                    style: TextStyle(fontSize: 13, color: at.textS),
                   ),
                   const SizedBox(width: 8),
                   _GBtn(
-                    label: 'Male',
+                    label: loc.male,
                     val: 'male',
                     sel: _gender == 'male',
                     onTap: () => setState(() => _gender = 'male'),
                   ),
                   const SizedBox(width: 8),
                   _GBtn(
-                    label: 'Female',
+                    label: loc.female,
                     val: 'female',
                     sel: _gender == 'female',
                     onTap: () => setState(() => _gender = 'female'),
@@ -348,30 +383,33 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
                   if (d != null) setState(() => _dob = d);
                 },
                 child: InputDecorator(
-                  decoration: _T.inp(
-                    'Date of Birth',
-                    pre: const Icon(
-                      Icons.cake_rounded,
-                      size: 18,
-                      color: _T.textM,
-                    ),
+                  decoration: _T.inpOf(
+                    context,
+                    loc.dateOfBirthLabel,
+                    pre: Icon(Icons.cake_rounded, size: 18, color: at.textM),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         _dob != null
-                            ? DateFormat('dd MMM yyyy').format(_dob!)
-                            : 'Tap to select',
+                            ? arDigits(
+                                DateFormat(
+                                  'dd MMM yyyy',
+                                  Localizations.localeOf(context).languageCode,
+                                ).format(_dob!),
+                                Localizations.localeOf(context).languageCode,
+                              )
+                            : loc.tapToSelect,
                         style: TextStyle(
                           fontSize: 13,
-                          color: _dob != null ? _T.textH : _T.textM,
+                          color: _dob != null ? at.textH : at.textM,
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         Icons.calendar_today_rounded,
                         size: 16,
-                        color: _T.textM,
+                        color: at.textM,
                       ),
                     ],
                   ),
@@ -389,7 +427,7 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Chronic Diseases',
+                    loc.chronicDiseases,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Colors.red[700],
@@ -401,16 +439,19 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: _T.divider),
+                  border: Border.all(color: at.divider),
                   borderRadius: BorderRadius.circular(12),
-                  color: _T.bgInput,
+                  color: at.bgInput,
                 ),
                 child: Column(
                   children: _commonDiseases.map((d) {
                     final sel = _diseases.contains(d);
                     return CheckboxListTile(
                       dense: true,
-                      title: Text(d, style: const TextStyle(fontSize: 13)),
+                      title: Text(
+                        _diseaseLabel(d, loc),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       value: sel,
                       activeColor: Colors.red[700],
                       shape: RoundedRectangleBorder(
@@ -453,8 +494,8 @@ class _AssistantPatFormState extends State<AssistantPatForm> {
                         )
                       : Text(
                           widget.existing != null
-                              ? 'Save Changes'
-                              : 'Add Patient',
+                              ? loc.saveChanges
+                              : loc.addPatient,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -491,23 +532,26 @@ class _GBtn extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: sel ? _T.green : _T.bgInput,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: sel ? _T.green : _T.divider),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: sel ? Colors.white : _T.textS,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: sel ? _T.green : at.bgInput,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sel ? _T.green : at.divider),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: sel ? Colors.white : at.textS,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

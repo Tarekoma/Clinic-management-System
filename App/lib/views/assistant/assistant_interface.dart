@@ -1,7 +1,28 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/views/assistant/assistant_interface.dart
+//
+// CHANGES IN THIS VERSION:
+//   1. This is now the Assistant module's theme root: build() wraps the
+//      entire Scaffold in Theme(data: AppThemes.assistantLight/assistantDark)
+//      driven by the global themeModeProvider. Every Assistant screen pushed
+//      below this widget (Dashboard, Appointments, Patients, Payments) now
+//      renders with the dedicated Assistant theme instead of sharing
+//      AppThemes.light/dark with the Doctor module.
+//   2. All hardcoded strings (Sign Out, Cancel, Profile, Appointments,
+//      Patients, Payments, Assistant badge, tooltips) replaced with
+//      AppLocalizations — same architecture as the Doctor module. Nav labels
+//      are now built per-build from `loc` instead of a static const list, so
+//      they rebuild instantly when localeProvider changes.
+//   3. The Sign Out confirmation dialog explicitly re-wraps itself with the
+//      captured Theme.of(context) — showDialog/showModalBottomSheet insert
+//      their content into the Navigator's Overlay, which sits outside the
+//      Theme() wrap added in (1), so without re-wrapping, dialogs would fall
+//      back to the global app theme instead of the Assistant theme.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
+import 'package:Hakim/providers/theme_providers.dart';
+import 'package:Hakim/utils/app_themes.dart';
 import 'package:Hakim/views/auths/login_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,13 +59,6 @@ class AssistantInterface extends ConsumerStatefulWidget {
 class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
   int _selectedIndex = 1;
 
-  static const _navItems = [
-    _NavItem(Icons.person_rounded, 'Profile'),
-    _NavItem(Icons.calendar_month_rounded, 'Appointments'),
-    _NavItem(Icons.people_alt_rounded, 'Patients'),
-    _NavItem(Icons.account_balance_wallet_rounded, 'Payments'),
-  ];
-
   // ── Init ───────────────────────────────────────────────────────────────────
 
   @override
@@ -67,44 +81,51 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
   // ── Logout ─────────────────────────────────────────────────────────────────
 
   void _confirmLogout() {
+    final loc = AppLocalizations.of(context)!;
+    final assistantTheme = Theme.of(context);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+      builder: (ctx) => Theme(
+        data: assistantTheme,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref.read(assistantViewModelProvider.notifier).logout();
-              if (!mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-                (_) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.urgent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+          title: Text(loc.signOutConfirmTitle),
+          content: Text(loc.signOutConfirmBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(loc.cancel),
             ),
-            child: const Text('Sign Out'),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await ref.read(assistantViewModelProvider.notifier).logout();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  (_) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _T.urgent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(loc.signOut),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   // ── Top bar ────────────────────────────────────────────────────────────────
 
-  Widget _buildTopBar(AssistantState state) => Container(
+  Widget _buildTopBar(AssistantState state, AppLocalizations loc) => Container(
     decoration: const BoxDecoration(gradient: _T.gGreen),
     child: SafeArea(
       bottom: false,
@@ -142,9 +163,9 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
                             color: Colors.white.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text(
-                            'Assistant',
-                            style: TextStyle(
+                          child: Text(
+                            loc.assistantRoleLabel,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -158,13 +179,13 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
                 ),
               ),
             ),
-            _buildDoctorSwitch(state.doctors, state.activeDoctor),
+            _buildDoctorSwitch(state.doctors, state.activeDoctor, loc),
             IconButton(
               onPressed: () =>
                   showAssistantSettings(context, widget.assistantProfile),
               icon: const Icon(Icons.settings_rounded, size: 20),
               color: Colors.white.withOpacity(0.85),
-              tooltip: 'Settings',
+              tooltip: loc.settingsTitle,
             ),
           ],
         ),
@@ -180,11 +201,12 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
   Widget _buildDoctorSwitch(
     List<Map<String, dynamic>> doctors,
     Map<String, dynamic>? activeDoctor,
+    AppLocalizations loc,
   ) {
     if (doctors.isEmpty) return const SizedBox.shrink();
 
     final fn = (activeDoctor?['first_name'] ?? '').toString().trim();
-    final activeName = fn.isNotEmpty ? 'Dr. $fn' : 'Doctor';
+    final activeName = fn.isNotEmpty ? loc.drPrefix(fn) : loc.doctorRole;
 
     // Single doctor — plain label, no dropdown arrow.
     if (doctors.length == 1) {
@@ -221,7 +243,7 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
     return PopupMenuButton<Map<String, dynamic>>(
       onSelected: (doc) =>
           ref.read(assistantViewModelProvider.notifier).setActiveDoctor(doc),
-      tooltip: 'Switch doctor',
+      tooltip: loc.switchDoctor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       color: Colors.white,
       itemBuilder: (_) => doctors.map((d) {
@@ -237,11 +259,13 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
                     ? Icons.check_circle_rounded
                     : Icons.radio_button_unchecked_rounded,
                 size: 16,
-                color: isActive ? _T.green : _T.textM,
+                color: isActive
+                    ? _T.green
+                    : Theme.of(context).extension<AssistantThemeData>()!.textM,
               ),
               const SizedBox(width: 8),
               Text(
-                'Dr. $dfn $dln'.trim(),
+                loc.drPrefix('$dfn $dln'.trim()),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
@@ -290,9 +314,9 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
 
   // ── Bottom nav ─────────────────────────────────────────────────────────────
 
-  Widget _buildBottomNav() => Container(
+  Widget _buildBottomNav(List<_NavItem> navItems) => Container(
     decoration: BoxDecoration(
-      color: _T.bgCard,
+      color: Theme.of(context).extension<AssistantThemeData>()!.bgCard,
       boxShadow: [
         BoxShadow(
           color: const Color(0xFF00695C).withOpacity(0.10),
@@ -306,9 +330,9 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
       child: SizedBox(
         height: 62,
         child: Row(
-          children: List.generate(_navItems.length, (i) {
+          children: List.generate(navItems.length, (i) {
             final sel = i == _selectedIndex;
-            final item = _navItems[i];
+            final item = navItems[i];
             return Expanded(
               child: InkWell(
                 onTap: () => setState(() => _selectedIndex = i),
@@ -331,7 +355,11 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
                       ),
                       child: Icon(
                         item.icon,
-                        color: sel ? _T.green : _T.textM,
+                        color: sel
+                            ? _T.green
+                            : Theme.of(
+                                context,
+                              ).extension<AssistantThemeData>()!.textM,
                         size: 22,
                       ),
                     ),
@@ -341,7 +369,11 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
-                        color: sel ? _T.green : _T.textM,
+                        color: sel
+                            ? _T.green
+                            : Theme.of(
+                                context,
+                              ).extension<AssistantThemeData>()!.textM,
                       ),
                     ),
                   ],
@@ -387,35 +419,58 @@ class _AssistantInterfaceState extends ConsumerState<AssistantInterface> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(assistantViewModelProvider);
-    return Scaffold(
-      backgroundColor: _T.bgPage,
-      body: Column(
-        children: [
-          _buildTopBar(state),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, 0.02),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(parent: anim, curve: Curves.easeOut),
-                      ),
-                  child: child,
+    final loc = AppLocalizations.of(context)!;
+
+    // ── Dedicated Assistant theme, driven by the SAME global themeModeProvider
+    // used by the Doctor module — so dark mode toggled anywhere in the app
+    // still flips this module too, but with Assistant's own teal/cyan slate
+    // theme instead of Doctor's navy/blue AppThemes.light/dark.
+    final themeMode = ref.watch(themeModeProvider);
+    final assistantTheme = themeMode == ThemeMode.dark
+        ? AppThemes.assistantDark
+        : AppThemes.assistantLight;
+
+    final navItems = [
+      _NavItem(Icons.person_rounded, loc.profile),
+      _NavItem(Icons.calendar_month_rounded, loc.appointments),
+      _NavItem(Icons.people_alt_rounded, loc.patients),
+      _NavItem(Icons.account_balance_wallet_rounded, loc.payments),
+    ];
+
+    return Theme(
+      data: assistantTheme,
+      child: Scaffold(
+        backgroundColor: Theme.of(
+          context,
+        ).extension<AssistantThemeData>()!.bgPage,
+        body: Column(
+          children: [
+            _buildTopBar(state, loc),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position:
+                        Tween<Offset>(
+                          begin: const Offset(0, 0.02),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(parent: anim, curve: Curves.easeOut),
+                        ),
+                    child: child,
+                  ),
+                ),
+                child: KeyedSubtree(
+                  key: ValueKey(_selectedIndex),
+                  child: _buildPage(),
                 ),
               ),
-              child: KeyedSubtree(
-                key: ValueKey(_selectedIndex),
-                child: _buildPage(),
-              ),
             ),
-          ),
-          _buildBottomNav(),
-        ],
+            _buildBottomNav(navItems),
+          ],
+        ),
       ),
     );
   }

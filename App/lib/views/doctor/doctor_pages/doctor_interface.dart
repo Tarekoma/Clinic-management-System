@@ -4,8 +4,16 @@
 // Shell widget: top bar, animated bottom nav, page router.
 // Navigation index is the only local state — everything else comes from
 // the ViewModel via Riverpod.
+//
+// CHANGES IN THIS VERSION:
+//   • Top bar time/date now uses DateFormat(..., localeCode) + arDigits()
+//     so it renders "م ٠٣:٠٠ / السبت، ٢٠ يونيو" in Arabic instead of
+//     "PM 03:00 / Sat, 20 Jun" regardless of app language.
+//   • 'Dr. {firstName} {lastName}' replaced with loc.drPrefix(fullName).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/views/auths/login_page.dart';
 import 'package:Hakim/views/doctor/consultation/consultation_page.dart';
 import 'package:Hakim/views/doctor/doctor_pages/doctor_settings_page.dart';
@@ -33,11 +41,11 @@ class _NavItem {
   const _NavItem(this.icon, this.label);
 }
 
-const _navItems = [
-  _NavItem(Icons.dashboard_rounded, 'Dashboard'),
-  _NavItem(Icons.calendar_month_rounded, 'Appointments'),
-  _NavItem(Icons.people_alt_rounded, 'Patients'),
-  _NavItem(Icons.account_balance_wallet_rounded, 'Finance'),
+List<_NavItem> _buildNavItems(AppLocalizations loc) => [
+  _NavItem(Icons.dashboard_rounded, loc.dashboard),
+  _NavItem(Icons.calendar_month_rounded, loc.appointments),
+  _NavItem(Icons.people_alt_rounded, loc.patients),
+  _NavItem(Icons.account_balance_wallet_rounded, loc.finance),
 ];
 
 // ── DoctorInterface ───────────────────────────────────────────────────────────
@@ -52,6 +60,7 @@ class DoctorInterface extends ConsumerStatefulWidget {
 }
 
 class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
+  late DoctorThemeData _dt; // injected in build()
   int _selectedIndex = 0;
 
   @override
@@ -74,11 +83,13 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
 
   @override
   Widget build(BuildContext context) {
+    _dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: _dt.bgPage,
       body: Column(
         children: [
-          _buildTopBar(),
+          _buildTopBar(loc),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
@@ -101,7 +112,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
               ),
             ),
           ),
-          _buildBottomNav(),
+          _buildBottomNav(loc),
         ],
       ),
     );
@@ -109,7 +120,21 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
 
   // ── Top bar ───────────────────────────────────────────────────────────────
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(AppLocalizations loc) {
+    final localeCode = Localizations.localeOf(context).languageCode;
+    final now = DateTime.now();
+    // FIXED: was DateFormat('hh:mm a').format(now) / DateFormat('EEE, dd MMM')
+    // with no locale arg — always rendered English text + Western digits
+    // regardless of the app's selected language.
+    final timeStr = arDigits(
+      DateFormat('hh:mm a', localeCode).format(now),
+      localeCode,
+    );
+    final dateStr = arDigits(
+      DateFormat('EEE, dd MMM', localeCode).format(now),
+      localeCode,
+    );
+
     return Container(
       decoration: const BoxDecoration(gradient: _T.gNavy),
       child: SafeArea(
@@ -134,7 +159,11 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Dr. ${widget.doctorProfile.firstName} ${widget.doctorProfile.lastName}',
+                          // FIXED: was hardcoded
+                          // 'Dr. ${firstName} ${lastName}'
+                          loc.drPrefix(
+                            '${widget.doctorProfile.firstName} ${widget.doctorProfile.lastName}',
+                          ),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -148,7 +177,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                               : widget.doctorProfile.clinicName?.isNotEmpty ==
                                     true
                               ? widget.doctorProfile.clinicName!
-                              : 'General Practitioner',
+                              : loc.generalPractitioner,
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.65),
                             fontSize: 11,
@@ -164,7 +193,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    DateFormat('hh:mm a').format(DateTime.now()),
+                    timeStr,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -172,7 +201,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                     ),
                   ),
                   Text(
-                    DateFormat('EEE, dd MMM').format(DateTime.now()),
+                    dateStr,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.65),
                       fontSize: 10,
@@ -185,7 +214,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                     showDoctorSettings(context, widget.doctorProfile),
                 icon: const Icon(Icons.settings_rounded, size: 20),
                 color: Colors.white.withOpacity(0.85),
-                tooltip: 'Settings',
+                tooltip: loc.settingsTitle,
               ),
             ],
           ),
@@ -196,10 +225,11 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
 
   // ── Bottom nav ────────────────────────────────────────────────────────────
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(AppLocalizations loc) {
+    final navItems = _buildNavItems(loc);
     return Container(
       decoration: BoxDecoration(
-        color: _T.bgCard,
+        color: _dt.bgCard,
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0B3D6B).withOpacity(0.10),
@@ -213,13 +243,13 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
         child: SizedBox(
           height: 62,
           child: Row(
-            children: List.generate(_navItems.length, (i) {
+            children: List.generate(navItems.length, (i) {
               final sel = i == _selectedIndex;
-              final item = _navItems[i];
+              final item = navItems[i];
               return Expanded(
                 child: InkWell(
                   onTap: () => setState(() => _selectedIndex = i),
-                  splashColor: _T.navy.withOpacity(0.08),
+                  splashColor: _dt.accent.withOpacity(0.12),
                   highlightColor: Colors.transparent,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -233,13 +263,13 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                         ),
                         decoration: BoxDecoration(
                           color: sel
-                              ? _T.navy.withOpacity(0.10)
+                              ? _dt.accent.withOpacity(0.12)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           item.icon,
-                          color: sel ? _T.navy : _T.textM,
+                          color: sel ? _dt.accent : _dt.textM,
                           size: 22,
                         ),
                       ),
@@ -249,7 +279,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
-                          color: sel ? _T.navy : _T.textM,
+                          color: sel ? _dt.accent : _dt.textM,
                         ),
                       ),
                     ],
@@ -300,16 +330,17 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
   // ── Logout ────────────────────────────────────────────────────────────────
 
   void _confirmLogout() {
+    final loc = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: Text(loc.signOutConfirmTitle),
+        content: Text(loc.signOutConfirmBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(loc.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -328,7 +359,7 @@ class _DoctorInterfaceState extends ConsumerState<DoctorInterface> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: const Text('Sign Out'),
+            child: Text(loc.signOut),
           ),
         ],
       ),

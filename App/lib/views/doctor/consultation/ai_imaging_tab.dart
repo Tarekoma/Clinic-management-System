@@ -1,68 +1,40 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// lib/views/doctor/consultation/ai_imaging_tab.dart
-//
-// Tab 3 — AI Imaging (X-ray / Skin disease analysis).
-//
-// Sections:
-//   1. Image Upload   — Camera / Gallery picker + image preview
-//   2. AI Analysis    — "Analyze Image" button (placeholder — AI not connected)
-//   3. Result Area    — AIAnalysisResultWidget (placeholder until backend ready)
-//
-// Pure StatelessWidget. All state lives in consultation_page.dart and is
-// passed in via constructor. The real AI analysis will be wired in later
-// once the backend service is available.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_consultation_widgets.dart';
 import 'package:Hakim/widgets/doctor/image_upload_widget.dart';
-import 'package:Hakim/widgets/doctor/ai_analysis_result_widget.dart';
 
 typedef _T = DoctorTheme;
 
 class AIImagingTab extends StatelessWidget {
-  // ── State snapshot (owned by parent) ──────────────────────────────────────
-
-  /// Currently selected image file. Null if none picked.
   final File? selectedImage;
-
-  /// Whether the AI analysis is in progress (reserved for future use).
-  final bool analysisLoading;
-
-  /// The AI result string. Null = no analysis yet (placeholder shown).
-  final String? analysisResult;
-
-  // ── Callbacks ─────────────────────────────────────────────────────────────
-
-  /// Called when the user picks Camera or Gallery.
-  /// Parent stores the file and rebuilds.
   final Future<void> Function(ImageSource source) onPickImage;
-
-  /// Called when "Analyze Image" is tapped.
-  /// Currently shows a placeholder snackbar — real AI logic added later.
   final VoidCallback onAnalyze;
+  final String selectedImageType;
+  final void Function(String type) onImageTypeChanged;
 
   const AIImagingTab({
     required this.selectedImage,
-    required this.analysisLoading,
-    required this.analysisResult,
     required this.onPickImage,
     required this.onAnalyze,
-    Key? key,
-  }) : super(key: key);
+    required this.selectedImageType,
+    required this.onImageTypeChanged,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Section header banner ──────────────────────────────────────────
+          // ── Section header banner ────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: _T.gradCard(),
@@ -78,41 +50,22 @@ class AIImagingTab extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'AI Medical Imaging',
-                        style: TextStyle(
+                      Text(
+                        loc.aiMedicalImaging,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
-                        'X-ray & skin disease detection',
+                        loc.xrayAndSkinDetection,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.65),
+                          color: Colors.white.withValues(alpha: 0.65),
                           fontSize: 11,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                // "Coming Soon" badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Coming Soon',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
                   ),
                 ),
               ],
@@ -121,9 +74,9 @@ class AIImagingTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // ── SECTION 1: Image Upload ────────────────────────────────────────
+          // ── SECTION 1: Image Upload ──────────────────────────────────────
           DoctorConsultCard(
-            title: 'Image Upload',
+            title: loc.imageUploadTitle,
             icon: Icons.upload_file_rounded,
             child: ImageUploadWidget(
               selectedImage: selectedImage,
@@ -133,9 +86,98 @@ class AIImagingTab extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // ── SECTION 2: AI Analysis ─────────────────────────────────────────
+          // ── Image type selector ──────────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onImageTypeChanged('XRAY'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: selectedImageType == 'XRAY' ? _T.navy : dt.bgInput,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selectedImageType == 'XRAY'
+                            ? _T.navy
+                            : dt.divider,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.monitor_heart_rounded,
+                          size: 16,
+                          color: selectedImageType == 'XRAY'
+                              ? Colors.white
+                              : dt.textS,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          loc.xray,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: selectedImageType == 'XRAY'
+                                ? Colors.white
+                                : dt.textS,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onImageTypeChanged('SKIN'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: selectedImageType == 'SKIN' ? _T.navy : dt.bgInput,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selectedImageType == 'SKIN'
+                            ? _T.navy
+                            : dt.divider,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.face_rounded,
+                          size: 16,
+                          color: selectedImageType == 'SKIN'
+                              ? Colors.white
+                              : dt.textS,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          loc.skin,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: selectedImageType == 'SKIN'
+                                ? Colors.white
+                                : dt.textS,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── SECTION 2: AI Analysis ───────────────────────────────────────
           DoctorConsultCard(
-            title: 'AI Analysis',
+            title: loc.aiAnalysisTitle,
             icon: Icons.psychology_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,11 +186,9 @@ class AIImagingTab extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E1),
+                    color: _T.tealPale,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFFFFCC02).withOpacity(0.5),
-                    ),
+                    border: Border.all(color: _T.teal.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,16 +196,15 @@ class AIImagingTab extends StatelessWidget {
                       const Icon(
                         Icons.info_outline_rounded,
                         size: 16,
-                        color: Color(0xFFF57C00),
+                        color: _T.teal,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'AI image analysis service is not connected yet. '
-                          'The button below is a placeholder for the upcoming backend integration.',
+                          loc.imagingInfoNotice,
                           style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF6D4C00),
+                            color: _T.teal,
                             height: 1.4,
                           ),
                         ),
@@ -176,32 +215,17 @@ class AIImagingTab extends StatelessWidget {
 
                 const SizedBox(height: 14),
 
-                // Analyze button (placeholder)
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    // Disabled when no image is selected or when loading
-                    onPressed: (selectedImage == null || analysisLoading)
-                        ? null
-                        : onAnalyze,
-                    icon: analysisLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.image_search_rounded, size: 18),
-                    label: Text(
-                      analysisLoading ? 'Analyzing...' : 'Analyze Image',
-                    ),
+                    onPressed: selectedImage == null ? null : onAnalyze,
+                    icon: const Icon(Icons.image_search_rounded, size: 18),
+                    label: Text(loc.analyzeImage),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _T.navy,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: _T.navy.withOpacity(0.35),
+                      disabledBackgroundColor: _T.navy.withValues(alpha: 0.35),
                       disabledForegroundColor: Colors.white54,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -213,26 +237,14 @@ class AIImagingTab extends StatelessWidget {
 
                 if (selectedImage == null) ...[
                   const SizedBox(height: 8),
-                  const Center(
+                  Center(
                     child: Text(
-                      'Select an image above to enable analysis',
-                      style: TextStyle(fontSize: 11, color: _T.textS),
+                      loc.selectImageToEnable,
+                      style: TextStyle(fontSize: 11, color: dt.textS),
                     ),
                   ),
                 ],
               ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // ── SECTION 3: Result Area ─────────────────────────────────────────
-          DoctorConsultCard(
-            title: 'Analysis Result',
-            icon: Icons.analytics_outlined,
-            child: AIAnalysisResultWidget(
-              result: analysisResult,
-              isLoading: analysisLoading,
             ),
           ),
         ],

@@ -4,10 +4,12 @@
 // CHANGE: "Done" (onStatus) removed from card actions.
 //         "Details" (onDetails) added — opens DoctorApptDetailsSheet with
 //         full patient information for the selected appointment.
+//         Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/providers/doctor_providers.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
@@ -36,13 +38,31 @@ class DoctorAppointmentsPage extends ConsumerStatefulWidget {
 
 class _DoctorAppointmentsPageState
     extends ConsumerState<DoctorAppointmentsPage> {
+  late DoctorThemeData _dt;
   DoctorApptFilter _filter = DoctorApptFilter.all;
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      ref.read(doctorViewModelProvider.notifier).loadMoreAppointments();
+    }
   }
 
   // ── Snack helper ──────────────────────────────────────────────────────────
@@ -64,6 +84,8 @@ class _DoctorAppointmentsPageState
 
   @override
   Widget build(BuildContext context) {
+    _dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     final state = ref.watch(doctorViewModelProvider);
     final vm = ref.read(doctorViewModelProvider.notifier);
 
@@ -72,14 +94,17 @@ class _DoctorAppointmentsPageState
     final list = vm.filteredAppointments(_filter);
 
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: _dt.bgPage,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showForm(context, null),
         backgroundColor: _T.navy,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'New Appointment',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        label: Text(
+          loc.newAppointment,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: Column(
@@ -89,13 +114,10 @@ class _DoctorAppointmentsPageState
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: TextField(
               controller: _searchCtrl,
-              decoration: _T.inp(
-                'Search patient name...',
-                pre: const Icon(
-                  Icons.search_rounded,
-                  color: _T.textM,
-                  size: 20,
-                ),
+              decoration: _T.inpOf(
+                context,
+                loc.searchPatientName,
+                pre: Icon(Icons.search_rounded, color: _dt.textM, size: 20),
                 suf: q.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 18),
@@ -117,11 +139,11 @@ class _DoctorAppointmentsPageState
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               children: [
                 for (final (f, lbl) in [
-                  (DoctorApptFilter.all, 'All'),
-                  (DoctorApptFilter.today, 'Today'),
-                  (DoctorApptFilter.upcoming, 'Upcoming'),
-                  (DoctorApptFilter.urgent, 'Urgent'),
-                  (DoctorApptFilter.completed, 'Done'),
+                  (DoctorApptFilter.all, loc.filterAll),
+                  (DoctorApptFilter.today, loc.filterToday),
+                  (DoctorApptFilter.upcoming, loc.filterUpcoming),
+                  (DoctorApptFilter.urgent, loc.filterUrgent),
+                  (DoctorApptFilter.completed, loc.filterDone),
                 ])
                   _buildChip(f, lbl, vm),
               ],
@@ -132,7 +154,7 @@ class _DoctorAppointmentsPageState
             child: RefreshIndicator(
               onRefresh: vm.fetchAppointments,
               color: _T.navy,
-              child: _buildList(loading, list, vm, state),
+              child: _buildList(loading, list, state, loc),
             ),
           ),
         ],
@@ -152,9 +174,9 @@ class _DoctorAppointmentsPageState
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: sel ? _T.navy : _T.bgCard,
+          color: sel ? _T.navy : _dt.bgCard,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: sel ? _T.navy : _T.divider),
+          border: Border.all(color: sel ? _T.navy : _dt.divider),
           boxShadow: sel
               ? [
                   BoxShadow(
@@ -172,7 +194,7 @@ class _DoctorAppointmentsPageState
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: sel ? Colors.white : _T.textS,
+                color: sel ? Colors.white : _dt.textS,
               ),
             ),
             if (cnt > 0) ...[
@@ -180,7 +202,7 @@ class _DoctorAppointmentsPageState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: sel ? Colors.white.withOpacity(0.25) : _T.bgInput,
+                  color: sel ? Colors.white.withOpacity(0.25) : _dt.bgInput,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -204,8 +226,8 @@ class _DoctorAppointmentsPageState
   Widget _buildList(
     bool loading,
     List<Map<String, dynamic>> list,
-    DoctorViewModel vm,
     DoctorState state,
+    AppLocalizations loc,
   ) {
     if (loading) {
       return const Center(
@@ -213,37 +235,101 @@ class _DoctorAppointmentsPageState
       );
     }
     if (list.isEmpty) {
-      return const DoctorEmpty(
+      return DoctorEmpty(
         icon: Icons.calendar_month_outlined,
-        title: 'No appointments found',
-        sub: 'Try a different filter or book a new appointment.',
+        title: loc.noAppointmentsFound,
+        sub: loc.noAppointmentsFoundSub,
       );
     }
-    return ListView.separated(
+
+    final showFooter =
+        state.loadingMoreAppointments || !state.appointmentsHasMore;
+
+    return ListView.builder(
+      controller: _scrollCtrl,
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemCount: list.length + (showFooter ? 1 : 0),
       itemBuilder: (ctx, i) {
+        if (i == list.length) {
+          if (state.loadingMoreAppointments) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: _T.navy,
+                  strokeWidth: 2,
+                ),
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text(
+                loc.endOfResults,
+                style: TextStyle(fontSize: 12, color: _dt.textM),
+              ),
+            ),
+          );
+        }
+
         final appt = list[i];
         final s = (appt['status'] ?? '').toUpperCase();
-        return GestureDetector(
-          onTap: () {
-            if (s == 'SCHEDULED' || s == 'IN_PROGRESS') {
-              widget.onStartConsultation(appt);
-            }
-          },
-          child: DoctorApptCard(
-            appt: appt,
-            onStart: () => widget.onStartConsultation(appt),
-            onEdit: () => _showForm(ctx, appt),
-            // ── Details: look up the full patient record from state, then
-            //    open the sheet.  Falls back gracefully when not found.
-            onDetails: () => _showDetails(appt, state),
-            onDelete: () => _delete(appt, vm),
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < list.length - 1 ? 10 : 0),
+          child: GestureDetector(
+            onTap: () {
+              if (s == 'SCHEDULED' || s == 'IN_PROGRESS') {
+                widget.onStartConsultation(appt);
+              }
+            },
+            child: DoctorApptCard(
+              appt: appt,
+              onStart: () => widget.onStartConsultation(appt),
+              onEdit: () => _showForm(ctx, appt),
+              onDetails: () => _showDetails(appt, state),
+              onCancel: () => _cancel(appt),
+            ),
           ),
         );
       },
     );
+  }
+
+  // ── Cancel appointment ────────────────────────────────────────────────────
+
+  Future<void> _cancel(Map<String, dynamic> appt) async {
+    final loc = AppLocalizations.of(context)!;
+    final vm = ref.read(doctorViewModelProvider.notifier);
+    final id = int.tryParse(appt['id'].toString());
+    if (id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(loc.cancelAppointmentAction),
+        content: Text(loc.cancelAppointmentConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(loc.no),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              loc.yes,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await vm.updateAppointmentStatus(id, 'CANCELLED');
+      if (mounted) _snack(loc.statusCancelled);
+    } catch (e) {
+      if (mounted) _snack(e.toString(), err: true);
+    }
   }
 
   // ── Open details sheet ────────────────────────────────────────────────────
@@ -268,50 +354,17 @@ class _DoctorAppointmentsPageState
     showAppointmentDetails(context: context, appt: appt, patient: patient);
   }
 
-  // ── Delete appointment ────────────────────────────────────────────────────
-
-  Future<void> _delete(Map<String, dynamic> a, DoctorViewModel vm) async {
-    final name = vm.apptName(a);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Appointment'),
-        content: Text('Delete appointment for $name? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.urgent,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await vm.deleteAppointment(int.parse(a['id'].toString()));
-    } catch (e) {
-      _snack(DoctorViewModel.extractError(e), err: true);
-    }
-  }
-
   // ── Create / edit form ────────────────────────────────────────────────────
-
   Future<void> _showForm(
     BuildContext context,
     Map<String, dynamic>? existing,
   ) async {
     final state = ref.read(doctorViewModelProvider);
     final vm = ref.read(doctorViewModelProvider.notifier);
+    final loc = AppLocalizations.of(context)!;
     final isNew = existing == null;
 
+    // No status manipulation here — viewmodel handles it internally
     final created = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -321,13 +374,14 @@ class _DoctorAppointmentsPageState
         patients: state.patients,
         types: state.appointmentTypes,
         doctorId: int.parse(widget.doctorProfile.id),
+        existingAppointments: state.appointments,
         onSubmit: (data, {existingId}) =>
             vm.createOrUpdateAppointment(data, existingId: existingId),
         snack: _snack,
       ),
     );
     if (isNew && created == true && mounted) {
-      _snack('Appointment booked successfully!');
+      _snack(loc.appointmentBookedSuccess);
       setState(() => _filter = DoctorApptFilter.all);
     }
   }

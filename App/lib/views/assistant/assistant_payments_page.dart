@@ -8,7 +8,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/providers/assistant_providers.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'package:Hakim/widgets/assistant/assistant_shared_widgets.dart';
 
@@ -40,18 +42,22 @@ class AssistantPaymentsPage extends ConsumerWidget {
     int id,
     bool currentlyPaid,
   ) async {
+    final loc = AppLocalizations.of(context)!;
     try {
       await ref
           .read(assistantViewModelProvider.notifier)
           .togglePayment(id, currentlyPaid: currentlyPaid);
-      _snack(context, currentlyPaid ? 'Marked as unpaid' : 'Marked as paid');
+      _snack(context, currentlyPaid ? loc.markedAsUnpaid : loc.markedAsPaid);
     } catch (e) {
-      _snack(context, 'Failed to update payment: ${e.toString()}', err: true);
+      _snack(context, loc.failedToUpdatePayment(e.toString()), err: true);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
     final state = ref.watch(assistantViewModelProvider);
     final vm = ref.read(assistantViewModelProvider.notifier);
     final stats = vm.paymentStats();
@@ -89,7 +95,7 @@ class AssistantPaymentsPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Total Revenue',
+                    loc.totalRevenue,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 13,
@@ -97,7 +103,7 @@ class AssistantPaymentsPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${total.toStringAsFixed(0)} EGP',
+                    '${arNumber(total, lc)} ${loc.currencyEgp}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 30,
@@ -110,8 +116,8 @@ class AssistantPaymentsPage extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: AssistantFinChip(
-                          label: 'Collected',
-                          value: '${paid.toStringAsFixed(0)} EGP',
+                          label: loc.collected,
+                          value: '${arNumber(paid, lc)} ${loc.currencyEgp}',
                           icon: Icons.check_circle_rounded,
                           color: const Color(0xFF69F0AE),
                         ),
@@ -119,8 +125,8 @@ class AssistantPaymentsPage extends ConsumerWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: AssistantFinChip(
-                          label: 'Outstanding',
-                          value: '${unpaid.toStringAsFixed(0)} EGP',
+                          label: loc.outstanding,
+                          value: '${arNumber(unpaid, lc)} ${loc.currencyEgp}',
                           icon: Icons.pending_rounded,
                           color: const Color(0xFFFFD54F),
                         ),
@@ -136,23 +142,23 @@ class AssistantPaymentsPage extends ConsumerWidget {
             // ── Collection rate ───────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: _T.card(),
+              decoration: AssistantTheme.cardOf(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Text(
-                        'Collection Rate',
+                      Text(
+                        loc.collectionRate,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: _T.textH,
+                          color: at.textH,
                         ),
                       ),
                       const Spacer(),
                       Text(
-                        '${(rate * 100).toStringAsFixed(0)}%',
+                        '${arNumber(rate * 100, lc)}%',
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
@@ -167,7 +173,7 @@ class AssistantPaymentsPage extends ConsumerWidget {
                     child: LinearProgressIndicator(
                       value: rate,
                       minHeight: 10,
-                      backgroundColor: _T.bgInput,
+                      backgroundColor: at.bgInput,
                       valueColor: const AlwaysStoppedAnimation<Color>(
                         _T.greenLight,
                       ),
@@ -178,12 +184,12 @@ class AssistantPaymentsPage extends ConsumerWidget {
             ),
 
             const SizedBox(height: 18),
-            const Text(
-              'Payment Records',
+            Text(
+              loc.paymentRecords,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: _T.textH,
+                color: at.textH,
               ),
             ),
             const SizedBox(height: 10),
@@ -199,9 +205,10 @@ class AssistantPaymentsPage extends ConsumerWidget {
                 ),
               )
             else if (billable.isEmpty)
-              const _Empty(
+              _Empty(
                 icon: Icons.receipt_long_outlined,
-                title: 'No payment records',
+                title: loc.noPaymentRecords,
+                sub: loc.noPaymentRecordsSub,
               )
             else
               ...billable.map(
@@ -238,6 +245,9 @@ class _PaymentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
     final isPaid = appt['is_paid'] == true;
     final fee = double.tryParse((appt['fee'] ?? 0).toString()) ?? 0.0;
     final dt = parseDate(appt['start_time']);
@@ -245,14 +255,14 @@ class _PaymentRow extends StatelessWidget {
     final type =
         (appt['appointment_type'] as Map?)?['name'] ??
         appt['appointment_type_name'] ??
-        'Consultation';
+        loc.consultationDefault;
     final id = int.tryParse((appt['id'] ?? '0').toString()) ?? 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _T.bgCard,
+        color: at.bgCard,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isPaid
@@ -289,10 +299,10 @@ class _PaymentRow extends StatelessWidget {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _T.textH,
+                    color: at.textH,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -300,9 +310,10 @@ class _PaymentRow extends StatelessWidget {
                 Text(
                   [
                     type,
-                    if (dt != null) DateFormat('dd MMM').format(dt),
+                    if (dt != null)
+                      arDigits(DateFormat('dd MMM', lc).format(dt), lc),
                   ].join('  •  '),
-                  style: const TextStyle(fontSize: 11, color: _T.textS),
+                  style: TextStyle(fontSize: 11, color: at.textS),
                 ),
               ],
             ),
@@ -311,7 +322,7 @@ class _PaymentRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${fee.toStringAsFixed(0)} EGP',
+                '${arNumber(fee, lc)} ${loc.currencyEgp}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -336,7 +347,7 @@ class _PaymentRow extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    isPaid ? 'PAID ✓' : 'UNPAID — Tap',
+                    isPaid ? loc.paidCheckLabel : loc.unpaidTapLabel,
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w800,

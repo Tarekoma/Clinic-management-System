@@ -4,12 +4,15 @@
 // Pure display page — no API calls, no ViewModel dependency.
 // Pushed as a full-screen route from both the shell top-bar avatar tap
 // and the dashboard greeting card tap.
+// Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
+import 'package:Hakim/views/doctor/doctor_pages/doctor_edit_profile_page.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 
 typedef _T = DoctorTheme;
@@ -20,33 +23,71 @@ extension _StrX on String {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DoctorProfilePage extends StatelessWidget {
+class DoctorProfilePage extends StatefulWidget {
   final UserProfile doctorProfile;
   const DoctorProfilePage({required this.doctorProfile, Key? key})
     : super(key: key);
 
+  @override
+  State<DoctorProfilePage> createState() => _DoctorProfilePageState();
+}
+
+class _DoctorProfilePageState extends State<DoctorProfilePage> {
+  late UserProfile _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.doctorProfile;
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  String _fmt(DateTime? d) {
-    if (d == null) return 'N/A';
+  String _fmt(DateTime? d, String na) {
+    if (d == null) return na;
     return DateFormat('dd MMM yyyy').format(d);
   }
 
   int? get _age {
-    if (doctorProfile.birthDate == null) return null;
-    return ((DateTime.now().difference(doctorProfile.birthDate!).inDays) /
-            365.25)
+    if (_current.birthDate == null) return null;
+    return ((DateTime.now().difference(_current.birthDate!).inDays) / 365.25)
         .floor();
+  }
+
+  Future<void> _openEdit() async {
+    final updated = await Navigator.push<UserProfile>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DoctorEditProfilePage(profile: _current),
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() => _current = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).profileUpdatedSuccess),
+          backgroundColor: _T.teal,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final name = doctorProfile.fullName.ifEmpty(doctorProfile.username);
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context);
+    final name = _current.fullName.ifEmpty(_current.username);
+    final na = loc.notAvailable;
 
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: dt.bgPage,
       body: Column(
         children: [
           // ── Gradient header ────────────────────────────────────────────────
@@ -68,15 +109,23 @@ class DoctorProfilePage extends StatelessWidget {
                           ),
                           onPressed: () => Navigator.pop(context),
                         ),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'My Profile',
-                            style: TextStyle(
+                            loc.myProfile,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_rounded,
+                            color: Colors.white70,
+                          ),
+                          tooltip: loc.editProfile,
+                          onPressed: _openEdit,
                         ),
                       ],
                     ),
@@ -92,7 +141,7 @@ class DoctorProfilePage extends StatelessWidget {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                               width: 3,
                             ),
                           ),
@@ -117,17 +166,16 @@ class DoctorProfilePage extends StatelessWidget {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: [
-                                  if ((doctorProfile.clinicName ?? '')
-                                      .isNotEmpty)
+                                  if ((_current.clinicName ?? '').isNotEmpty)
                                     _ProfileBadge(
                                       icon: Icons.local_hospital_rounded,
-                                      label: doctorProfile.clinicName!,
+                                      label: _current.clinicName!,
                                     ),
                                   _ProfileBadge(
                                     icon: Icons.medical_services_rounded,
                                     label:
-                                        doctorProfile.specialization ??
-                                        'Doctor',
+                                        _current.specialization ??
+                                        loc.doctorRole,
                                   ),
                                 ],
                               ),
@@ -151,62 +199,66 @@ class DoctorProfilePage extends StatelessWidget {
                   // Personal information card
                   Container(
                     padding: const EdgeInsets.all(18),
-                    decoration: _T.card(),
+                    decoration: _T.cardOf(context),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Row(
+                        Row(
                           children: [
                             Icon(
                               Icons.person_rounded,
                               size: 16,
                               color: _T.navy,
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'Personal Information',
+                              loc.personalInformation,
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
-                                color: _T.textH,
+                                color: dt.textH,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 14),
-                        const Divider(height: 1, color: _T.divider),
+                        Divider(height: 1, color: dt.divider),
                         const SizedBox(height: 14),
-                        _ProfileRow('Full Name', 'Dr. $name'),
-                        _ProfileRow('Email', doctorProfile.email),
+                        _ProfileRow(loc.fullNameLabel, 'Dr. $name'),
+                        _ProfileRow(loc.emailLabel, _current.email),
                         _ProfileRow(
-                          'Gender',
-                          doctorProfile.gender.isEmpty
-                              ? 'N/A'
-                              : doctorProfile.gender[0].toUpperCase() +
-                                    doctorProfile.gender.substring(1),
+                          loc.genderLabel,
+                          _current.gender.isEmpty
+                              ? na
+                              : _current.gender[0].toUpperCase() +
+                                    _current.gender.substring(1),
                         ),
                         _ProfileRow(
-                          'Date of Birth',
-                          doctorProfile.birthDate != null
-                              ? _fmt(doctorProfile.birthDate)
-                              : 'N/A',
+                          loc.dateOfBirthLabel,
+                          _current.birthDate != null
+                              ? _fmt(_current.birthDate, na)
+                              : na,
                         ),
-                        if (_age != null) _ProfileRow('Age', '$_age years'),
-                        _ProfileRow('Role', 'Doctor'),
+                        if (_age != null)
+                          _ProfileRow(loc.ageLabel, loc.yearsCount(_age!)),
+                        _ProfileRow(loc.roleLabel, loc.doctorRole),
                         _ProfileRow(
-                          'Clinic',
-                          doctorProfile.clinicName ?? 'N/A',
+                          loc.clinicLabel,
+                          _current.clinicName ?? na,
                         ),
                         _ProfileRow(
-                          'Specialization',
-                          doctorProfile.specialization ?? 'N/A',
+                          loc.specializationLabel,
+                          _current.specialization ?? na,
                         ),
-                        if ((doctorProfile.licenseNumber ?? '').isNotEmpty)
+                        if ((_current.licenseNumber ?? '').isNotEmpty)
                           _ProfileRow(
-                            'License No.',
-                            doctorProfile.licenseNumber!,
+                            loc.licenseNoLabel,
+                            _current.licenseNumber!,
                           ),
-                        _ProfileRow('Joined', _fmt(doctorProfile.createdAt)),
+                        _ProfileRow(
+                          loc.joinedLabel,
+                          _fmt(_current.createdAt, na),
+                        ),
                       ],
                     ),
                   ),
@@ -235,7 +287,7 @@ class _ProfileBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.15),
+      color: Colors.white.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Row(
@@ -262,33 +314,37 @@ class _ProfileRow extends StatelessWidget {
   const _ProfileRow(this.label, this.value, {Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: _T.textS,
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: dt.textS,
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            value.isEmpty ? 'N/A' : value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: _T.textH,
+          Expanded(
+            child: Text(
+              value.isEmpty ? loc.notAvailable : value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: dt.textH,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

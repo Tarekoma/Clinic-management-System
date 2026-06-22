@@ -8,8 +8,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/providers/assistant_providers.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'package:Hakim/widgets/assistant/assistant_shared_widgets.dart';
 
@@ -27,8 +29,11 @@ class AssistantDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
     final state = ref.watch(assistantViewModelProvider);
     final clinic = profile.clinicName ?? '';
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -51,7 +56,7 @@ class AssistantDashboard extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Welcome back,',
+                          loc.welcomeBack,
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 13,
@@ -74,10 +79,13 @@ class AssistantDashboard extends ConsumerWidget {
                           children: [
                             _infoPill(
                               Icons.local_hospital_outlined,
-                              clinic.isEmpty ? 'No Clinic' : clinic,
+                              clinic.isEmpty ? loc.noClinic : clinic,
                             ),
                             const SizedBox(width: 8),
-                            _infoPill(Icons.badge_rounded, 'Assistant'),
+                            _infoPill(
+                              Icons.badge_rounded,
+                              loc.assistantRoleLabel,
+                            ),
                           ],
                         ),
                       ],
@@ -114,16 +122,16 @@ class AssistantDashboard extends ConsumerWidget {
               children: [
                 AssistantStatCard(
                   icon: Icons.calendar_month_rounded,
-                  label: 'Appointments',
-                  value: '${state.appointments.length}',
+                  label: loc.appointments,
+                  value: arDigits('${state.appointments.length}', lc),
                   color: _T.green,
                   bg: _T.greenPale,
                 ),
                 const SizedBox(width: 12),
                 AssistantStatCard(
                   icon: Icons.people_alt_rounded,
-                  label: 'Patients',
-                  value: '${state.patients.length}',
+                  label: loc.patients,
+                  value: arDigits('${state.patients.length}', lc),
                   color: _T.emerald,
                   bg: const Color(0xFFE8F5E9),
                 ),
@@ -135,44 +143,58 @@ class AssistantDashboard extends ConsumerWidget {
             // ── Personal info card ────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(18),
-              decoration: _T.card(),
+              decoration: AssistantTheme.cardOf(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
                       Icon(Icons.person_rounded, size: 16, color: _T.green),
                       SizedBox(width: 8),
                       Text(
-                        'Personal Information',
+                        loc.personalInformation,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: _T.textH,
+                          color: at.textH,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
-                  AssistantIRow('Full Name', profile.fullName),
-                  AssistantIRow('Email', profile.email),
+                  AssistantIRow(loc.fullNameLabel, profile.fullName),
+                  AssistantIRow(loc.emailLabel, profile.email),
                   AssistantIRow(
-                    'Gender',
-                    profile.gender.isEmpty ? 'N/A' : profile.gender,
+                    loc.genderLabel,
+                    profile.gender.isEmpty ? loc.notAvailable : profile.gender,
                   ),
                   AssistantIRow(
-                    'Role',
-                    profile.userType.isEmpty ? 'Assistant' : profile.userType,
+                    loc.roleLabel,
+                    profile.userType.isEmpty
+                        ? loc.assistantRoleLabel
+                        : profile.userType,
                   ),
-                  AssistantIRow('Clinic', clinic.isEmpty ? 'N/A' : clinic),
+                  AssistantIRow(
+                    loc.clinicLabel,
+                    clinic.isEmpty ? loc.notAvailable : clinic,
+                  ),
                   if (profile.birthDate != null)
                     AssistantIRow(
-                      'Birth Date',
-                      DateFormat('dd MMM yyyy').format(profile.birthDate!),
+                      loc.dateOfBirthLabel,
+                      arDigits(
+                        DateFormat(
+                          'dd MMM yyyy',
+                          lc,
+                        ).format(profile.birthDate!),
+                        lc,
+                      ),
                     ),
                   AssistantIRow(
-                    'Joined',
-                    DateFormat('dd MMM yyyy').format(profile.createdAt),
+                    loc.joinedLabel,
+                    arDigits(
+                      DateFormat('dd MMM yyyy', lc).format(profile.createdAt),
+                      lc,
+                    ),
                   ),
                 ],
               ),

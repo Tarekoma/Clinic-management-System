@@ -1,8 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/widgets/doctor/doctor_pat_card.dart
+// Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 
@@ -38,6 +40,8 @@ class DoctorPatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     final gender = (patient['gender'] ?? '').toString().toUpperCase();
     final phone = patient['phone'] ?? '';
     final age = _age;
@@ -47,7 +51,7 @@ class DoctorPatCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: _T.card(),
+        decoration: _T.cardOf(context),
         child: Row(
           children: [
             DoctorAvatar(name: _name, size: 48),
@@ -61,21 +65,21 @@ class DoctorPatCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           _name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: _T.textH,
+                            color: dt.textH,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (age != null)
                         Text(
-                          '$age yrs',
-                          style: const TextStyle(
+                          loc.yearsCount(age),
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: _T.textS,
+                            color: dt.textS,
                           ),
                         ),
                     ],
@@ -95,24 +99,24 @@ class DoctorPatCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          gender == 'MALE' ? 'Male' : 'Female',
-                          style: const TextStyle(fontSize: 11, color: _T.textS),
+                          gender == 'MALE' ? loc.male : loc.female,
+                          style: TextStyle(fontSize: 11, color: dt.textS),
                         ),
                         if (phone.isNotEmpty)
-                          const Text(
+                          Text(
                             '  •  ',
-                            style: TextStyle(fontSize: 11, color: _T.textM),
+                            style: TextStyle(fontSize: 11, color: dt.textM),
                           ),
                       ],
                       if (phone.isNotEmpty)
                         Expanded(
-                          child: Text(
-                            phone,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _T.textS,
+                          child: Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Text(
+                              phone,
+                              style: TextStyle(fontSize: 11, color: dt.textS),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                     ],
@@ -190,16 +194,12 @@ class DoctorPatCard extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.chevron_right_rounded, color: _T.textM),
+                Icon(Icons.chevron_right_rounded, color: dt.textM),
                 if (onEdit != null) ...[
                   const SizedBox(height: 4),
                   GestureDetector(
                     onTap: onEdit,
-                    child: const Icon(
-                      Icons.edit_rounded,
-                      size: 16,
-                      color: _T.textM,
-                    ),
+                    child: Icon(Icons.edit_rounded, size: 16, color: dt.textM),
                   ),
                 ],
               ],

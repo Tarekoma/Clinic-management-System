@@ -5,16 +5,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:Hakim/providers/doctor_providers.dart';
+import 'package:Hakim/services/API_Service.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 
 typedef _T = DoctorTheme;
 
 class VoiceReportReviewPage extends ConsumerStatefulWidget {
   final int visitId;
+  final int reportId;
   final String aiTranscription;
 
   const VoiceReportReviewPage({
     required this.visitId,
+    required this.reportId,
     required this.aiTranscription,
     Key? key,
   }) : super(key: key);
@@ -25,13 +28,14 @@ class VoiceReportReviewPage extends ConsumerStatefulWidget {
 }
 
 class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
+  late DoctorThemeData _dt; // injected in build()
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _titleCtrl;
   late final TextEditingController _diagnosisCtrl;
-  late final TextEditingController _treatmentCtrl;
-  late final TextEditingController _prescriptionsCtrl;
-  late final TextEditingController _doctorNotesCtrl;
+  late final TextEditingController _recommendationsCtrl;
+  late final TextEditingController _medicationsCtrl;
+  late final TextEditingController _followUpCtrl;
 
   bool _isSaving = false;
 
@@ -44,12 +48,10 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
 
     final parsed = _parseStructured(widget.aiTranscription);
     _diagnosisCtrl = TextEditingController(text: parsed['Diagnosis'] ?? '');
-    _treatmentCtrl = TextEditingController(text: parsed['Treatment'] ?? '');
-    _prescriptionsCtrl = TextEditingController(
-      text: parsed['Prescriptions'] ?? '',
-    );
-    _doctorNotesCtrl = TextEditingController(
-      text: parsed['Doctor Notes'] ?? '',
+    _recommendationsCtrl = TextEditingController(text: parsed['Recommendations'] ?? '');
+    _medicationsCtrl = TextEditingController(text: parsed['Medications'] ?? '');
+    _followUpCtrl = TextEditingController(
+      text: parsed['Follow-up Instructions'] ?? '',
     );
   }
 
@@ -57,30 +59,56 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
   void dispose() {
     _titleCtrl.dispose();
     _diagnosisCtrl.dispose();
-    _treatmentCtrl.dispose();
-    _prescriptionsCtrl.dispose();
-    _doctorNotesCtrl.dispose();
+    _recommendationsCtrl.dispose();
+    _medicationsCtrl.dispose();
+    _followUpCtrl.dispose();
     super.dispose();
   }
 
   // ── Parser ─────────────────────────────────────────────────────────────────
   // Parses the structured string produced by _buildStructuredReport:
-  //   "Diagnosis:\nvalue\n\nTreatment:\nvalue\n\n..."
+  //   "Diagnosis:\nvalue\n\nRecommendations:\nvalue\n\n..."
 
   Map<String, String> _parseStructured(String raw) {
     final result = <String, String>{};
-    const labels = ['Diagnosis', 'Treatment', 'Prescriptions', 'Doctor Notes'];
+    // New canonical labels used by updated _buildStructuredReport().
+    // Legacy aliases handle backward-compat with older stored reports.
+    const labels = [
+      'Diagnosis',
+      'Recommendations',
+      'Medications',
+      'Follow-up Instructions',
+    ];
+    const legacyAlias = {
+      'treatment': 'Recommendations',
+      'prescriptions': 'Medications',
+      'doctor notes': 'Follow-up Instructions',
+    };
 
     final blocks = raw.split(RegExp(r'\n{2,}'));
     for (final block in blocks) {
       final lines = block.trim().split('\n');
       if (lines.isEmpty) continue;
-      final header = lines.first.trim();
+      final header = lines.first.trim().toLowerCase();
+      final value = lines.skip(1).join('\n').trim();
+      if (value.isEmpty) continue;
+
+      // Try canonical labels first.
+      bool matched = false;
       for (final label in labels) {
-        if (header.toLowerCase().startsWith(label.toLowerCase())) {
-          final value = lines.skip(1).join('\n').trim();
-          if (value.isNotEmpty) result[label] = value;
+        if (header.startsWith(label.toLowerCase())) {
+          result[label] = value;
+          matched = true;
           break;
+        }
+      }
+      // Fall back to legacy aliases for data written before this rename.
+      if (!matched) {
+        for (final entry in legacyAlias.entries) {
+          if (header.startsWith(entry.key)) {
+            result[entry.value] = value;
+            break;
+          }
         }
       }
     }
@@ -103,24 +131,44 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
     try {
       final vm = ref.read(doctorViewModelProvider.notifier);
 
-      // Treatment and Prescriptions → recommendations list
-      final recommendations = <String>[
-        if (_treatmentCtrl.text.trim().isNotEmpty) _treatmentCtrl.text.trim(),
-        if (_prescriptionsCtrl.text.trim().isNotEmpty)
-          _prescriptionsCtrl.text.trim(),
-      ];
-
-      await vm.saveVoiceReport(
-        visitId: widget.visitId,
-        diagnosis: _diagnosisCtrl.text.trim(),
-        recommendations: recommendations,
-        doctorNotes: _doctorNotesCtrl.text.trim(),
+      // ── PATCH the DRAFT the backend already created — do NOT create a new one
+      await vm.updateVoiceReport(
+        reportId: widget.reportId,
+        data: {
+          'ai_diagnosis': _diagnosisCtrl.text.trim(),
+          'ai_recommendations': _recommendationsCtrl.text.trim().isNotEmpty
+              ? [_recommendationsCtrl.text.trim()]
+              : [],
+          'ai_medications': _medicationsCtrl.text.trim().isNotEmpty
+              ? [
+                  {'name': _medicationsCtrl.text.trim()},
+                ]
+              : [],
+          'ai_follow_up': _followUpCtrl.text.trim(),
+          'doctor_notes': _followUpCtrl.text.trim(),
+        },
       );
+
+      // Advance to REVIEWED so the "Complete Consultation" flow can call
+      // finalize directly without an extra status-transition step.
+      // Non-fatal: if this fails (e.g. report was already REVIEWED) we still
+      // consider the save successful — finalize in _save() handles DRAFT too.
+      try {
+        await ApiService.updateReportStatus(widget.reportId, 'REVIEWED');
+        debugPrint(
+          '✅ VoiceReportReviewPage: report #${widget.reportId} → REVIEWED',
+        );
+      } catch (e) {
+        debugPrint(
+          '⚠️ VoiceReportReviewPage: could not advance to REVIEWED: $e '
+          '(will be handled during finalization)',
+        );
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Report saved successfully'),
+          content: Text('Report saved and marked as reviewed'),
           backgroundColor: Colors.green,
         ),
       );
@@ -137,13 +185,13 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
       if (mounted) setState(() => _isSaving = false);
     }
   }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    _dt = Theme.of(context).extension<DoctorThemeData>()!;
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: _dt.bgPage,
       appBar: AppBar(
         backgroundColor: _T.navy,
         foregroundColor: Colors.white,
@@ -195,12 +243,12 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    _T.teal.withOpacity(0.12),
-                    _T.navy.withOpacity(0.06),
+                    _T.teal.withValues(alpha: 0.12),
+                    _T.navy.withValues(alpha: 0.06),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _T.teal.withOpacity(0.3)),
+                border: Border.all(color: _T.teal.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -226,7 +274,7 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
                           'Review and edit each section before saving',
                           style: TextStyle(
                             fontSize: 11,
-                            color: _T.textS.withOpacity(0.8),
+                            color: _dt.textS.withValues(alpha: 0.8),
                           ),
                         ),
                       ],
@@ -242,15 +290,15 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
             _SectionLabel(
               label: 'Report Title',
               icon: Icons.title_rounded,
-              color: _T.textH,
+              color: _dt.textH,
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _titleCtrl,
               decoration: _inp('Enter report title'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: _T.textH,
+                color: _dt.textH,
                 fontWeight: FontWeight.w600,
               ),
               validator: (v) =>
@@ -268,34 +316,32 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
               color: _T.navy,
             ),
 
-            // ── Treatment ──────────────────────────────────────────────────
-            _buildSection(
-              icon: Icons.healing_rounded,
-              label: 'Treatment',
-              controller: _treatmentCtrl,
-              hint: 'AI-generated treatment plan…',
-              color: _T.teal,
-            ),
-
-            // ── Prescriptions ──────────────────────────────────────────────
+            // ── Medications ────────────────────────────────────────────────
             _buildSection(
               icon: Icons.medication_rounded,
-              label: 'Prescriptions',
-              controller: _prescriptionsCtrl,
-              hint: 'AI-generated prescriptions…',
-              color: const Color(
-                0xFFE65100,
-              ), // deep orange — matches screenshot
+              label: 'Medications',
+              controller: _medicationsCtrl,
+              hint: 'AI-generated medications…',
+              color: const Color(0xFFE65100),
               borderColor: const Color(0xFFE65100),
             ),
 
-            // ── Doctor Notes ───────────────────────────────────────────────
+            // ── Recommendations ────────────────────────────────────────────
             _buildSection(
-              icon: Icons.note_alt_rounded,
-              label: 'Doctor Notes',
-              controller: _doctorNotesCtrl,
-              hint: 'Additional notes, follow-up instructions…',
-              color: _T.textS,
+              icon: Icons.healing_rounded,
+              label: 'Recommendations',
+              controller: _recommendationsCtrl,
+              hint: 'AI-generated recommendations…',
+              color: _T.teal,
+            ),
+
+            // ── Follow-up Instructions ─────────────────────────────────────
+            _buildSection(
+              icon: Icons.event_repeat_rounded,
+              label: 'Follow-up Instructions',
+              controller: _followUpCtrl,
+              hint: 'Follow-up instructions and additional notes…',
+              color: _dt.textS,
             ),
 
             const SizedBox(height: 28),
@@ -345,8 +391,8 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
                     ? null
                     : () => Navigator.of(context).pop(false),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _T.textS,
-                  side: BorderSide(color: _T.textS.withOpacity(0.3)),
+                  foregroundColor: _dt.textS,
+                  side: BorderSide(color: _dt.textS.withValues(alpha: 0.3)),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -383,7 +429,7 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
             minLines: 2,
             keyboardType: TextInputType.multiline,
             decoration: _inp(hint, borderColor: borderColor ?? color),
-            style: const TextStyle(fontSize: 13, color: _T.textH, height: 1.7),
+            style: TextStyle(fontSize: 13, color: _dt.textH, height: 1.7),
           ),
         ],
       ),
@@ -394,20 +440,23 @@ class _VoiceReportReviewPageState extends ConsumerState<VoiceReportReviewPage> {
 
   InputDecoration _inp(String hint, {Color? borderColor}) => InputDecoration(
     hintText: hint,
-    hintStyle: TextStyle(color: _T.textS.withOpacity(0.45), fontSize: 13),
+    hintStyle: TextStyle(
+      color: _dt.textS.withValues(alpha: 0.45),
+      fontSize: 13,
+    ),
     filled: true,
-    fillColor: _T.bgInput,
+    fillColor: _dt.bgInput,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide(
-        color: borderColor?.withOpacity(0.35) ?? _T.divider,
+        color: borderColor?.withValues(alpha: 0.35) ?? _dt.divider,
       ),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide(
-        color: borderColor?.withOpacity(0.35) ?? _T.divider,
+        color: borderColor?.withValues(alpha: 0.35) ?? _dt.divider,
       ),
     ),
     focusedBorder: OutlineInputBorder(

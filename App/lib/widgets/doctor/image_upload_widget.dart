@@ -5,11 +5,14 @@
 //
 // Pure StatelessWidget. The selected image file and callbacks are owned
 // by the parent (AIImagingTab → consultation_page.dart).
+//
+// CHANGES IN THIS VERSION: Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 
 typedef _T = DoctorTheme;
@@ -29,6 +32,8 @@ class ImageUploadWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -37,7 +42,7 @@ class ImageUploadWidget extends StatelessWidget {
           children: [
             Expanded(
               child: _PickerButton(
-                label: 'Camera',
+                label: loc.cameraLabel,
                 icon: Icons.camera_alt_rounded,
                 onTap: () => onPickImage(ImageSource.camera),
               ),
@@ -45,7 +50,7 @@ class ImageUploadWidget extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _PickerButton(
-                label: 'Gallery',
+                label: loc.galleryLabel,
                 icon: Icons.photo_library_rounded,
                 onTap: () => onPickImage(ImageSource.gallery),
               ),
@@ -78,9 +83,9 @@ class ImageUploadWidget extends StatelessWidget {
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Tap buttons to replace',
-                    style: TextStyle(color: Colors.white, fontSize: 10),
+                  child: Text(
+                    loc.tapButtonsToReplace,
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
                   ),
                 ),
               ],
@@ -93,7 +98,7 @@ class ImageUploadWidget extends StatelessWidget {
             width: double.infinity,
             height: 140,
             decoration: BoxDecoration(
-              color: _T.bgInput,
+              color: dt.bgInput,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _T.navy.withOpacity(0.15),
@@ -107,14 +112,14 @@ class ImageUploadWidget extends StatelessWidget {
                 Icon(
                   Icons.add_photo_alternate_outlined,
                   size: 36,
-                  color: _T.textM.withOpacity(0.5),
+                  color: dt.textM.withOpacity(0.5),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'No image selected',
+                  loc.noImageSelected,
                   style: TextStyle(
                     fontSize: 13,
-                    color: _T.textM.withOpacity(0.6),
+                    color: dt.textM.withOpacity(0.6),
                   ),
                 ),
               ],
@@ -141,26 +146,27 @@ class _PickerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: _T.bgInput,
+          color: dt.bgInput,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _T.navy.withOpacity(0.12)),
+          border: Border.all(color: dt.accent.withOpacity(0.25)),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 28, color: _T.navy),
+            Icon(icon, size: 28, color: dt.accent),
             const SizedBox(height: 6),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: _T.textH,
+                color: dt.textH,
               ),
             ),
           ],

@@ -8,6 +8,7 @@
 
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/services/API_Service.dart';
+import 'package:Hakim/views/admin/admin_interface.dart';
 import 'package:Hakim/views/assistant/assistant_interface.dart';
 import 'package:Hakim/views/auths/login_page.dart';
 import 'package:Hakim/views/doctor/doctor_pages/doctor_interface.dart';
@@ -68,6 +69,8 @@ class _SplashScreenState extends State<SplashScreen> {
         destination = DoctorInterface(doctorProfile: profile);
       } else if (role == 'assistant') {
         destination = AssistantInterface(assistantProfile: profile);
+      } else if (role == 'admin') {
+        destination = AdminInterface(adminProfile: profile);
       } else {
         // Unknown role — fall back to login
         destination = const LoginPage();

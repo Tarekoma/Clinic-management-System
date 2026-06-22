@@ -191,13 +191,14 @@ class DoctorApptDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
       minChildSize: 0.45,
       maxChildSize: 0.93,
       builder: (_, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
-          color: _T.bgPage,
+        decoration: BoxDecoration(
+          color: dt.bgPage,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
@@ -209,32 +210,32 @@ class DoctorApptDetailsSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _T.divider,
+                  color: dt.divider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             _buildHeader(context),
-            const Divider(height: 1, color: _T.divider),
+            Divider(height: 1, color: dt.divider),
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  _sectionTitle('Appointment'),
+                  _sectionTitle(context, 'Appointment'),
                   _buildApptInfo(),
                   const SizedBox(height: 20),
-                  _sectionTitle('Patient Information'),
+                  _sectionTitle(context, 'Patient Information'),
                   _buildPatientInfo(),
                   if (_chronicDiseases.isNotEmpty) ...[
                     const SizedBox(height: 20),
-                    _sectionTitle('Chronic Conditions'),
+                    _sectionTitle(context, 'Chronic Conditions'),
                     _buildConditionChips(),
                   ],
                   if (_notes.isNotEmpty) ...[
                     const SizedBox(height: 20),
-                    _sectionTitle('Notes / Chief Complaint'),
-                    _buildNotesCard(),
+                    _sectionTitle(context, 'Notes / Chief Complaint'),
+                    _buildNotesCard(context),
                   ],
                 ],
               ),
@@ -247,64 +248,67 @@ class DoctorApptDetailsSheet extends StatelessWidget {
 
   // ── Header ────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 12, 12, 14),
-    child: Row(
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0B3D6B), Color(0xFF1565C0)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+  Widget _buildHeader(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 14),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0B3D6B), Color(0xFF1565C0)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
             ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            _initials,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
+            alignment: Alignment.center,
+            child: Text(
+              _initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _fullName,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: _T.textH,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _fullName,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: dt.textH,
+                  ),
                 ),
-              ),
-              SizedBox(height: 4),
-              Row(
-                children: [
-                  _StatusBadge(label: _statusLabel, color: _statusColor),
-                  if (_isUrgent) ...[
-                    const SizedBox(width: 6),
-                    _StatusBadge(label: '⚡ Urgent', color: _T.urgent),
+                SizedBox(height: 4),
+                Row(
+                  children: [
+                    _StatusBadge(label: _statusLabel, color: _statusColor),
+                    if (_isUrgent) ...[
+                      const SizedBox(width: 6),
+                      _StatusBadge(label: '⚡ Urgent', color: _T.urgent),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
-        IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close_rounded, color: _T.textS),
-        ),
-      ],
-    ),
-  );
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: Icon(Icons.close_rounded, color: dt.textS),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ── Appointment card ──────────────────────────────────────────────────────
 
@@ -399,34 +403,40 @@ class DoctorApptDetailsSheet extends StatelessWidget {
 
   // ── Notes ─────────────────────────────────────────────────────────────────
 
-  Widget _buildNotesCard() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: _T.bgCard,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _T.divider),
-    ),
-    child: Text(
-      _notes,
-      style: const TextStyle(fontSize: 13, color: _T.textS, height: 1.55),
-    ),
-  );
+  Widget _buildNotesCard(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: dt.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: dt.divider),
+      ),
+      child: Text(
+        _notes,
+        style: TextStyle(fontSize: 13, color: dt.textS, height: 1.55),
+      ),
+    );
+  }
 
   // ── Section title ─────────────────────────────────────────────────────────
 
-  Widget _sectionTitle(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(
-      text.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _T.textM.withOpacity(0.7),
-        letterSpacing: 0.8,
+  Widget _sectionTitle(BuildContext context, String text) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: dt.textS,
+          letterSpacing: 0.8,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -458,32 +468,35 @@ class _InfoCard extends StatelessWidget {
   const _InfoCard({required this.children});
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: _T.bgCard,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _T.divider),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.04),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ],
-    ),
-    child: Column(
-      children: List.generate(
-        children.length,
-        (i) => Column(
-          children: [
-            children[i],
-            if (i < children.length - 1)
-              const Divider(height: 1, indent: 48, color: _T.divider),
-          ],
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Container(
+      decoration: BoxDecoration(
+        color: dt.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: dt.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: List.generate(
+          children.length,
+          (i) => Column(
+            children: [
+              children[i],
+              if (i < children.length - 1)
+                Divider(height: 1, indent: 48, color: dt.divider),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _InfoRow extends StatelessWidget {
@@ -502,69 +515,72 @@ class _InfoRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    child: Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _T.navy.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(9),
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: _T.navy.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 16, color: _T.navy),
           ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: 16, color: _T.navy),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _T.textM.withOpacity(0.7),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: valueColor ?? _T.textH,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (copyable && value != '—')
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: value));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$label copied'),
-                  duration: const Duration(seconds: 1),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: _T.teal,
-                  margin: const EdgeInsets.all(16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: dt.textS,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              );
-            },
-            child: Icon(
-              Icons.copy_rounded,
-              size: 16,
-              color: _T.textM.withOpacity(0.5),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? dt.textH,
+                  ),
+                ),
+              ],
             ),
           ),
-      ],
-    ),
-  );
+          if (copyable && value != '—')
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: value));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$label copied'),
+                    duration: const Duration(seconds: 1),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: _T.teal,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              },
+              child: Icon(
+                Icons.copy_rounded,
+                size: 16,
+                color: dt.textM.withOpacity(0.75),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

@@ -13,7 +13,7 @@ import 'package:Hakim/model/UserProfile.dart';
 // DESTINATION
 // ══════════════════════════════════════════════════════════════════════════════
 
-enum AuthDestination { none, doctor, assistant }
+enum AuthDestination { none, doctor, assistant, admin }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // REGISTRATION DATA
@@ -118,6 +118,10 @@ class AuthViewModel extends StateNotifier<AuthState> {
     _instance?.state = const AuthState();
   }
 
+  static void updateUser(UserProfile profile) {
+    _instance?.state = _instance!.state.copyWith(user: profile);
+  }
+
   static const String _baseUrl = 'https://backend.hakim-app.cloud';
   static const String _apiKey =
       '66ba4126aa3b9f227adde3d1e8e143ad0076ad0fdaf861501051eabec00ccc0b';
@@ -171,6 +175,8 @@ class AuthViewModel extends StateNotifier<AuthState> {
         dest = AuthDestination.doctor;
       } else if (role == 'assistant') {
         dest = AuthDestination.assistant;
+      } else if (role == 'admin') {
+        dest = AuthDestination.admin;
       } else {
         final resolved = await _resolveRoleByEmail(email.trim());
         if (resolved == null) {
@@ -184,9 +190,16 @@ class AuthViewModel extends StateNotifier<AuthState> {
         resolvedProfile = resolved.$2;
       }
 
-      final roleToSave = dest == AuthDestination.doctor
-          ? 'doctor'
-          : 'assistant';
+      String roleToSave;
+      if (dest == AuthDestination.doctor) {
+        roleToSave = 'doctor';
+      } else if (dest == AuthDestination.assistant) {
+        roleToSave = 'assistant';
+      } else if (dest == AuthDestination.admin) {
+        roleToSave = 'admin';
+      } else {
+        roleToSave = 'doctor';
+      }
       await ApiService.saveRole(roleToSave);
 
       await ApiService.saveUserProfile({
@@ -463,6 +476,34 @@ class AuthViewModel extends StateNotifier<AuthState> {
             0,
           ),
         );
+      }
+
+      // Check admin accounts
+      try {
+        final admins = await ApiService.getAdmins();
+        final adminMatch = admins.firstWhere(
+          (a) => a['email'] == email,
+          orElse: () => {},
+        );
+        if (adminMatch.isNotEmpty) {
+          return (
+            AuthDestination.admin,
+            _buildProfile(
+              Map<String, dynamic>.from(adminMatch),
+              email,
+              'admin',
+              0,
+            ),
+          );
+        }
+      } catch (_) {
+        // Admin endpoint may not return a list — treat as admin role if email matches
+        if (email == _adminEmail) {
+          return (
+            AuthDestination.admin,
+            _buildProfile({}, email, 'admin', 0),
+          );
+        }
       }
     } catch (_) {}
     return null;

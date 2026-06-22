@@ -24,31 +24,34 @@ class DoctorConsultCard extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: _T.card(),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 15, color: _T.navy),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: _T.textH,
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _T.cardOf(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: dt.accent),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: dt.textH,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        child,
-      ],
-    ),
-  );
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
 }
 
 // ── Symptom chip ──────────────────────────────────────────────────────────────
@@ -102,66 +105,69 @@ class DoctorRxItem extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.all(14),
-    decoration: _T.card(r: 12),
-    child: Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            color: _T.tealPale,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              '$index',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: _T.teal,
-              ),
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: _T.cardOf(context, r: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(
+              color: _T.tealPale,
+              shape: BoxShape.circle,
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                med['name'] ?? '',
+            child: Center(
+              child: Text(
+                '$index',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: _T.textH,
+                  color: _T.teal,
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                [
-                  med['dose'],
-                  med['frequency'],
-                  med['duration'],
-                ].where((s) => s != null && s.isNotEmpty).join('  •  '),
-                style: const TextStyle(fontSize: 11, color: _T.textS),
-              ),
-            ],
+            ),
           ),
-        ),
-        IconButton(
-          icon: const Icon(
-            Icons.delete_outline_rounded,
-            color: _T.urgent,
-            size: 20,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  med['name'] ?? '',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: dt.textH,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    med['dose'],
+                    med['frequency'],
+                    med['duration'],
+                  ].where((s) => s != null && s.isNotEmpty).join('  •  '),
+                  style: TextStyle(fontSize: 11, color: dt.textS),
+                ),
+              ],
+            ),
           ),
-          onPressed: onRemove,
-        ),
-      ],
-    ),
-  );
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: _T.urgent,
+              size: 20,
+            ),
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Image pick button ─────────────────────────────────────────────────────────
@@ -178,26 +184,29 @@ class DoctorImgBtn extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: _T.bgInput,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _T.divider),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: _T.navy, size: 24),
-            const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 12, color: _T.textS)),
-          ],
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: dt.bgInput,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: dt.divider),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: dt.accent, size: 24),
+              const SizedBox(height: 6),
+              Text(label, style: TextStyle(fontSize: 12, color: dt.textS)),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ── Finance chip ──────────────────────────────────────────────────────────────

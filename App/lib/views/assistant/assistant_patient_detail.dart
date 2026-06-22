@@ -5,6 +5,7 @@
 // Visual code 100% identical to original.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/widgets/assistant/assistant_shared_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -88,6 +89,7 @@ class AssistantPatientDetail extends StatelessWidget {
     final age = _age;
     final gender = (patient['gender'] ?? '').toString().toUpperCase();
     final hasChronic = _conditionsText.isNotEmpty;
+    final loc = AppLocalizations.of(context)!;
 
     return Dialog.fullscreen(
       child: Scaffold(
@@ -296,7 +298,7 @@ class AssistantPatientDetail extends StatelessWidget {
                                 ),
                               ),
                               _Badge(
-                                label: _T.sLabel(status),
+                                label: _T.sLabel(status, loc),
                                 fg: _T.sFg(status),
                                 bg: _T.sBg(status),
                               ),

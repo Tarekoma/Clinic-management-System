@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:Hakim/utils/doctor_theme.dart';
 
 class VoiceRecordingWidget extends StatefulWidget {
   // ── FIX 1 ─────────────────────────────────────────────────────────────────
@@ -246,6 +247,7 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
     // ── FIX 4 ─────────────────────────────────────────────────────────────
     // Show a dedicated processing state while the parent transcribes the audio.
     // Previously the widget jumped straight back to idle, giving no feedback
@@ -254,7 +256,7 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
       return Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: dt.bgCard,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -273,14 +275,14 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
               'Transcribing audio…',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: dt.textS,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               'Please wait while AI processes your recording',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 12, color: dt.textM),
               textAlign: TextAlign.center,
             ),
           ],
@@ -291,7 +293,7 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: dt.bgCard,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -341,7 +343,7 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
             style: TextStyle(
               fontSize: 48,
               fontWeight: FontWeight.bold,
-              color: _isRecording ? Colors.red : Colors.grey[600],
+              color: _isRecording ? Colors.red : dt.textS,
             ),
           ),
 
@@ -442,7 +444,7 @@ class _VoiceRecordingWidgetState extends State<VoiceRecordingWidget> {
                       ? 'Recording paused. Tap resume to continue.'
                       : 'Recording... Tap stop when finished.')
                 : 'Tap the microphone to start recording your medical report',
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            style: TextStyle(color: dt.textS, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ],

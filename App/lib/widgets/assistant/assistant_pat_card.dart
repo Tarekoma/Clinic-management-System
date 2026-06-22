@@ -6,6 +6,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
 import 'assistant_shared_widgets.dart';
 
@@ -24,9 +26,6 @@ class AssistantPatCard extends StatelessWidget {
     Key? key,
   }) : super(key: key);
 
-  String get _name =>
-      '${patient['first_name'] ?? ''} ${patient['last_name'] ?? ''}'.trim();
-
   int? get _age {
     final dob = patient['birth_date'] ?? patient['date_of_birth'];
     if (dob == null) return null;
@@ -41,20 +40,29 @@ class AssistantPatCard extends StatelessWidget {
     }
   }
 
-  PopupMenuItem<String> _menuItem(IconData icon, String label, Color color) =>
-      PopupMenuItem<String>(
-        value: label,
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Text(label, style: TextStyle(color: color, fontSize: 14)),
-          ],
-        ),
-      );
+  PopupMenuItem<String> _menuItem(
+    IconData icon,
+    String value,
+    String label,
+    Color color,
+  ) => PopupMenuItem<String>(
+    value: value,
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 10),
+        Text(label, style: TextStyle(color: color, fontSize: 14)),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
+    final name = '${patient['first_name'] ?? ''} ${patient['last_name'] ?? ''}'
+        .trim();
     final gender = (patient['gender'] ?? '').toString().toUpperCase();
     final phone = patient['phone'] ?? '';
     final age = _age;
@@ -74,10 +82,10 @@ class AssistantPatCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: _T.card(),
+        decoration: AssistantTheme.cardOf(context),
         child: Row(
           children: [
-            _Avatar(name: _name, size: 48),
+            _Avatar(name: name, size: 48),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -88,22 +96,22 @@ class AssistantPatCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          _name,
-                          style: const TextStyle(
+                          name,
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: _T.textH,
+                            color: at.textH,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (age != null)
                         Text(
-                          '$age yrs',
-                          style: const TextStyle(
+                          arDigits(loc.yearsCount(age), lc),
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: _T.textS,
+                            color: at.textS,
                           ),
                         ),
                     ],
@@ -124,23 +132,20 @@ class AssistantPatCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          gender == 'MALE' ? 'Male' : 'Female',
-                          style: const TextStyle(fontSize: 11, color: _T.textS),
+                          gender == 'MALE' ? loc.male : loc.female,
+                          style: TextStyle(fontSize: 11, color: at.textS),
                         ),
                         if (phone.isNotEmpty)
-                          const Text(
+                          Text(
                             '  •  ',
-                            style: TextStyle(fontSize: 11, color: _T.textM),
+                            style: TextStyle(fontSize: 11, color: at.textM),
                           ),
                       ],
                       if (phone.isNotEmpty)
                         Expanded(
                           child: Text(
                             phone,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _T.textS,
-                            ),
+                            style: TextStyle(fontSize: 11, color: at.textS),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -193,14 +198,24 @@ class AssistantPatCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               itemBuilder: (_) => [
-                _menuItem(Icons.info_outline_rounded, 'View', _T.info),
-                _menuItem(Icons.edit_rounded, 'Edit', _T.green),
-                _menuItem(Icons.delete_outline_rounded, 'Delete', _T.urgent),
+                _menuItem(
+                  Icons.info_outline_rounded,
+                  'view',
+                  loc.actionDetails,
+                  _T.info,
+                ),
+                _menuItem(Icons.edit_rounded, 'edit', loc.actionEdit, _T.green),
+                _menuItem(
+                  Icons.delete_outline_rounded,
+                  'delete',
+                  loc.actionDelete,
+                  _T.urgent,
+                ),
               ],
               onSelected: (v) {
-                if (v == 'View') onTap();
-                if (v == 'Edit') onEdit();
-                if (v == 'Delete') onDelete();
+                if (v == 'view') onTap();
+                if (v == 'edit') onEdit();
+                if (v == 'delete') onDelete();
               },
             ),
           ],

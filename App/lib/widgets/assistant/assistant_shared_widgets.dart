@@ -1,18 +1,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/widgets/assistant/assistant_shared_widgets.dart
 //
-// Every small, reusable widget that was previously defined as a private class
-// inside Assistant_Interface.dart.  Now public so all assistant view files
-// can import them.
+// CHANGE: every widget that previously read a static _T.bgInput / _T.textH /
+// _T.textS / _T.textM / _T.divider / _T.card() constant now reads the
+// equivalent value from Theme.of(context).extension<AssistantThemeData>()!
+// so dark mode actually changes these surfaces. Public constructors/props
+// are UNCHANGED — every call site in every other file compiles unmodified.
 //
-// The `typedef _T = AssistantTheme;` alias preserves every _T.xxx reference
-// unchanged from the original source — no visual code was edited.
+// Brand/status colors (green, urgent, success, warning, info, etc.) are
+// untouched — they're identity colors, not theme-neutral surfaces.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 
-// Allow all original _T.xxx references to compile without a single change.
 typedef _T = AssistantTheme;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -51,7 +54,7 @@ class AssistantAvatar extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// BADGE  — coloured label pill
+// BADGE  — coloured label pill (already context-free; fg/bg always passed in)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AssistantBadge extends StatelessWidget {
@@ -99,42 +102,45 @@ class AssistantEmpty extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: _T.bgInput,
-              shape: BoxShape.circle,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: at.bgInput,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 38, color: at.textM),
             ),
-            child: Icon(icon, size: 38, color: _T.textM),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _T.textS,
-            ),
-          ),
-          if (sub != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 16),
             Text(
-              sub!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: _T.textM),
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: at.textS,
+              ),
             ),
+            if (sub != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                sub!,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: at.textM),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -146,18 +152,21 @@ class AssistantSectionHead extends StatelessWidget {
   const AssistantSectionHead({required this.title, Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: _T.textH,
-        letterSpacing: 0.2,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: at.textH,
+          letterSpacing: 0.2,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -169,35 +178,38 @@ class AssistantIRow extends StatelessWidget {
   const AssistantIRow(this.label, this.value, {Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: _T.textS,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: at.textS,
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            value.isEmpty ? '—' : value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: _T.textH,
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: at.textH,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -218,44 +230,44 @@ class AssistantStatCard extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _T.card(),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: color,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: AssistantTheme.cardOf(context),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
                 ),
-              ),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: _T.textS),
-              ),
-            ],
-          ),
-        ],
+                Text(label, style: TextStyle(fontSize: 11, color: at.textS)),
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FINANCE CHIP  (payments page hero card)
+// FINANCE CHIP  (payments page hero card — sits on a gradient, untouched)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AssistantFinChip extends StatelessWidget {
@@ -309,7 +321,7 @@ class AssistantFinChip extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// COUNT CHIP  (appointments page summary row)
+// COUNT CHIP  (appointments page summary row — color/bg always passed in)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AssistantCountChip extends StatelessWidget {
@@ -325,46 +337,49 @@ class AssistantCountChip extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-        const SizedBox(width: 5),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$count',
+  Widget build(BuildContext context) {
+    final lc = Localizations.localeOf(context).languageCode;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
             style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
               color: color,
             ),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(width: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              arDigits('$count', lc),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// BOTTOM SHEET TILE  (appointment options sheet)
+// BOTTOM SHEET TILE  (appointment options sheet — color always passed in)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AssistantBottomSheetTile extends StatelessWidget {
@@ -421,36 +436,41 @@ class AssistantToggleRow extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => onChanged(!value),
-    child: Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: value ? bg : _T.bgInput,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: value ? color.withOpacity(0.4) : _T.divider),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: value ? color : _T.textM, size: 20),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: value ? color : _T.textS,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: value ? bg : at.bgInput,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: value ? color.withOpacity(0.4) : at.divider,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: value ? color : at.textM, size: 20),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: value ? color : at.textS,
+              ),
             ),
-          ),
-          const Spacer(),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeColor: color,
-          ),
-        ],
+            const Spacer(),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              activeColor: color,
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -471,33 +491,36 @@ class AssistantInfoCard extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: _T.card(),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: color,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AssistantTheme.cardOf(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const Divider(height: 1, color: _T.divider),
-        const SizedBox(height: 8),
-        ...rows,
-      ],
-    ),
-  );
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: at.divider),
+          const SizedBox(height: 8),
+          ...rows,
+        ],
+      ),
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -517,25 +540,28 @@ class AssistantGenderButton extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: sel ? _T.green : _T.bgInput,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: sel ? _T.green : _T.divider),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: sel ? Colors.white : _T.textS,
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: sel ? AssistantTheme.green : at.bgInput,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sel ? AssistantTheme.green : at.divider),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: sel ? Colors.white : at.textS,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -552,46 +578,50 @@ class AssistantErrorWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: _T.urgentBg,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.error_outline_rounded,
-              color: _T.urgent,
-              size: 36,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: const TextStyle(fontSize: 14, color: _T.textS),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.green,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+  Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: _T.urgentBg,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: _T.urgent,
+                size: 36,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(fontSize: 14, color: at.textS),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(loc.retry),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _T.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

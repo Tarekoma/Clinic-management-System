@@ -7,15 +7,20 @@
 // Reads doctorViewModelProvider directly (ConsumerStatefulWidget) so it can
 // call vm.fetchVisits / vm.assignCondition / vm.removeCondition without any
 // callback chain through parent pages.
+//
+// Localized via AppLocalizations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/providers/doctor_providers.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
+import 'package:Hakim/views/doctor/lab_reports/lab_reports_page.dart';
+import 'package:Hakim/views/doctor/lab_reports/lab_report_viewer_page.dart';
 
 typedef _T = DoctorTheme;
 
@@ -38,21 +43,36 @@ class DoctorPatientDetail extends ConsumerStatefulWidget {
 
 class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
     with SingleTickerProviderStateMixin {
+  late DoctorThemeData _thDt;
   late TabController _tabs;
   List<Map<String, dynamic>> _visits = [];
   bool _loadingVisits = true;
 
+  // Lab history — loaded lazily when the user opens the Lab tab
+  List<Map<String, dynamic>> _labHistory = []; // [{visit, reports:[...]}]
+  bool _loadingLabHistory = false;
+  bool _labHistoryLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
+    _tabs.addListener(_onTabChanged);
     _loadVisits();
   }
 
   @override
   void dispose() {
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (_tabs.indexIsChanging) return;
+    if (_tabs.index == 3 && !_labHistoryLoaded && !_loadingLabHistory) {
+      _loadLabHistory();
+    }
   }
 
   Future<void> _loadVisits() async {
@@ -64,31 +84,65 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
     try {
       final vm = ref.read(doctorViewModelProvider.notifier);
       final d = await vm.fetchVisits(pid);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _visits = d;
           _loadingVisits = false;
         });
+        // If the user already opened the Lab tab before visits finished loading
+        if (_tabs.index == 3 && !_labHistoryLoaded && !_loadingLabHistory) {
+          _loadLabHistory();
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingVisits = false);
     }
   }
 
-  void _snack(String msg, {bool err = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: err ? _T.urgent : _T.teal,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  Future<void> _loadLabHistory() async {
+    if (_labHistoryLoaded) return;
+    setState(() => _loadingLabHistory = true);
+    try {
+      final vm = ref.read(doctorViewModelProvider.notifier);
+
+      // Use already-loaded visits; if still loading, fetch directly
+      var visits = _visits;
+      if (visits.isEmpty && _loadingVisits) {
+        final pid = int.tryParse((widget.patient['id'] ?? '').toString()) ?? 0;
+        if (pid > 0) {
+          try {
+            visits = await vm.fetchVisits(pid);
+          } catch (_) {}
+        }
+      }
+
+      final history = <Map<String, dynamic>>[];
+      for (final v in visits) {
+        final vid = int.tryParse((v['id'] ?? 0).toString()) ?? 0;
+        if (vid <= 0) continue;
+        try {
+          final reports = await vm.fetchLabReports(vid);
+          if (reports.isNotEmpty) {
+            history.add({'visit': v, 'reports': reports});
+          }
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _labHistory = history;
+          _labHistoryLoaded = true;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loadingLabHistory = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    _thDt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context);
     // ── LIVE state — rebuilds automatically on every provider update ──────────
     final state = ref.watch(doctorViewModelProvider);
 
@@ -141,8 +195,8 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
       maxChildSize: 0.95,
       minChildSize: 0.5,
       builder: (_, ctrl) => Container(
-        decoration: const BoxDecoration(
-          color: _T.bgCard,
+        decoration: BoxDecoration(
+          color: _thDt.bgCard,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -154,7 +208,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: _T.divider,
+                    color: _thDt.divider,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -183,19 +237,19 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                         const SizedBox(height: 4),
                         Text(
                           [
-                            if (age != null) '$age yrs',
+                            if (age != null) loc.yearsCount(age),
                             if ((livePatient['gender'] ?? '')
                                 .toString()
                                 .isNotEmpty)
                               (livePatient['gender'].toString().toUpperCase() ==
                                       'MALE'
-                                  ? 'Male'
-                                  : 'Female'),
+                                  ? loc.male
+                                  : loc.female),
                             if (livePatient['phone'] != null)
                               livePatient['phone'],
                           ].join('  •  '),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha:0.7),
                             fontSize: 11,
                           ),
                         ),
@@ -205,7 +259,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                   IconButton(
                     onPressed: () => widget.onEditPatient(livePatient),
                     icon: const Icon(Icons.edit_rounded, color: Colors.white70),
-                    tooltip: 'Edit Patient',
+                    tooltip: loc.editPatientTooltip,
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -221,27 +275,29 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
             TabBar(
               controller: _tabs,
               labelColor: _T.navy,
-              unselectedLabelColor: _T.textM,
+              unselectedLabelColor: _thDt.textM,
               indicatorColor: _T.navy,
               indicatorWeight: 2.5,
               labelStyle: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
-              tabs: const [
-                Tab(text: 'Overview'),
-                Tab(text: 'Visits'),
-                Tab(text: 'Reports'),
+              tabs: [
+                Tab(text: loc.overviewTab),
+                Tab(text: loc.visitsTab),
+                Tab(text: loc.reportsTab),
+                Tab(text: loc.labReportsTabLabel),
               ],
             ),
-            const Divider(height: 1, color: _T.divider),
+            Divider(height: 1, color: _thDt.divider),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
-                  _overviewTab(ctrl, livePatient, liveAppts),
-                  _visitsTab(ctrl),
-                  _reportsTab(ctrl, liveReports),
+                  _overviewTab(ctrl, livePatient, liveAppts, loc),
+                  _visitsTab(ctrl, loc),
+                  _reportsTab(ctrl, liveReports, loc),
+                  _labHistoryTab(ctrl, loc),
                 ],
               ),
             ),
@@ -253,14 +309,14 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
 
   // ── Overview tab ─────────────────────────────────────────────────────────────
 
-  // ── Overview tab ─────────────────────────────────────────────────────────────
-
   Widget _overviewTab(
     ScrollController ctrl,
     Map<String, dynamic> patient,
     List<Map<String, dynamic>> appts,
+    AppLocalizations loc,
   ) {
     final p = patient; // live patient passed from ref.watch in build()
+    final dash = '—';
     return ListView(
       controller: ctrl,
       padding: const EdgeInsets.all(20),
@@ -268,29 +324,29 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         // Info card
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _T.card(),
+          decoration: _T.cardOf(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Patient Information',
+              Text(
+                loc.patientInformation,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: _T.textH,
+                  color: _thDt.textH,
                 ),
               ),
               const SizedBox(height: 12),
-              DoctorIRow('National ID', p['national_id'] ?? '—'),
-              DoctorIRow('Phone', p['phone'] ?? '—'),
-              DoctorIRow('Region', p['region'] ?? '—'),
+              DoctorIRow(loc.nationalIdLabel, p['national_id'] ?? dash),
+              DoctorIRow(loc.phoneLabel, p['phone'] ?? dash),
+              DoctorIRow(loc.regionLabel, p['region'] ?? dash),
               if (p['birth_date'] != null || p['date_of_birth'] != null)
                 DoctorIRow(
-                  'Date of Birth',
-                  _fmtDate(p['birth_date'] ?? p['date_of_birth']),
+                  loc.dateOfBirthLabel,
+                  _fmtDate(p['birth_date'] ?? p['date_of_birth'], dash),
                 ),
               if ((p['email'] ?? '').toString().isNotEmpty)
-                DoctorIRow('Email', p['email']),
+                DoctorIRow(loc.emailLabel, p['email']),
             ],
           ),
         ),
@@ -298,7 +354,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         // Chronic Diseases card
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _T.card(),
+          decoration: _T.cardOf(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -310,19 +366,19 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                     color: Color(0xFF6A1B9A),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Chronic Diseases',
+                  Text(
+                    loc.chronicDiseases,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: _T.textH,
+                      color: _thDt.textH,
                     ),
                   ),
                   const Spacer(),
                   Builder(
                     builder: (_) {
-                      final count =
-                          (p['chronic_diseases'] as List?)?.length ?? 0;
+                      final count = _chronicNames(p).length;
+                      if (count == 0) return const SizedBox.shrink();
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -333,7 +389,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          '$count/5',
+                          '$count',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -348,13 +404,11 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
               const SizedBox(height: 12),
               Builder(
                 builder: (_) {
-                  final diseases = List<String>.from(
-                    p['chronic_diseases'] ?? [],
-                  );
+                  final diseases = _chronicNames(p);
                   if (diseases.isEmpty) {
-                    return const Text(
-                      'No chronic diseases recorded',
-                      style: TextStyle(fontSize: 12, color: _T.textS),
+                    return Text(
+                      loc.noChronicDiseasesRecorded,
+                      style: TextStyle(fontSize: 12, color: _thDt.textS),
                     );
                   }
                   return Wrap(
@@ -371,7 +425,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                               color: const Color(0xFFF3E5F5),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.3),
+                                color: const Color(0xFF6A1B9A).withValues(alpha:0.3),
                               ),
                             ),
                             child: Text(
@@ -392,12 +446,12 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
-          'Recent Appointments',
+        Text(
+          loc.recentAppointments,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: _T.textH,
+            color: _thDt.textH,
           ),
         ),
         const SizedBox(height: 8),
@@ -411,24 +465,28 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
-            decoration: _T.card(r: 12),
+            decoration: _T.cardOf(context, r: 12),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.calendar_today_rounded,
                   size: 13,
-                  color: _T.textM,
+                  color: _thDt.textM,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     dt != null
                         ? DateFormat('dd MMM yyyy  •  hh:mm a').format(dt)
-                        : 'Unknown date',
-                    style: const TextStyle(fontSize: 12, color: _T.textS),
+                        : loc.unknownDate,
+                    style: TextStyle(fontSize: 12, color: _thDt.textS),
                   ),
                 ),
-                DoctorBadge(label: _T.sLabel(s), fg: _T.sFg(s), bg: _T.sBg(s)),
+                DoctorBadge(
+                  label: _T.sLabel(s, loc),
+                  fg: _T.sFg(s),
+                  bg: _T.sBg(s),
+                ),
               ],
             ),
           );
@@ -439,17 +497,17 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
 
   // ── Visits tab ────────────────────────────────────────────────────────────────
 
-  Widget _visitsTab(ScrollController ctrl) {
+  Widget _visitsTab(ScrollController ctrl, AppLocalizations loc) {
     if (_loadingVisits) {
       return const Center(
         child: CircularProgressIndicator(color: _T.navy, strokeWidth: 2),
       );
     }
     if (_visits.isEmpty) {
-      return const DoctorEmpty(
+      return DoctorEmpty(
         icon: Icons.assignment_outlined,
-        title: 'No visits recorded',
-        sub: 'Visits appear here after consultations.',
+        title: loc.noVisitsRecorded,
+        sub: loc.noVisitsRecordedSub,
       );
     }
     return ListView.separated(
@@ -469,7 +527,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         final diag = v['diagnosis'] ?? v['chief_complaint'] ?? '';
         return Container(
           padding: const EdgeInsets.all(14),
-          decoration: _T.card(r: 12),
+          decoration: _T.cardOf(context, r: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -484,15 +542,15 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                   Expanded(
                     child: Text(
                       dt != null ? DateFormat('dd MMM yyyy').format(dt) : '—',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: _T.textH,
+                        color: _thDt.textH,
                       ),
                     ),
                   ),
                   DoctorBadge(
-                    label: _T.sLabel(s),
+                    label: _T.sLabel(s, loc),
                     fg: _T.sFg(s),
                     bg: _T.sBg(s),
                   ),
@@ -502,11 +560,15 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                 const SizedBox(height: 7),
                 Text(
                   diag.toString(),
-                  style: const TextStyle(fontSize: 12, color: _T.textS),
+                  style: TextStyle(fontSize: 12, color: _thDt.textS),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
+              const SizedBox(height: 10),
+              Divider(height: 1, color: _thDt.divider),
+              const SizedBox(height: 8),
+              _LabReportsButton(visit: v, patientName: widget.patient['first_name']?.toString() ?? ''),
             ],
           ),
         );
@@ -519,12 +581,13 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
   Widget _reportsTab(
     ScrollController ctrl,
     List<Map<String, dynamic>> reports,
+    AppLocalizations loc,
   ) {
     if (reports.isEmpty) {
-      return const DoctorEmpty(
+      return DoctorEmpty(
         icon: Icons.description_outlined,
-        title: 'No reports yet',
-        sub: 'Reports appear here after voice consultations.',
+        title: loc.noReportsYet,
+        sub: loc.noReportsYetSub,
       );
     }
     return ListView.separated(
@@ -549,7 +612,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         final visitNum = i + 1; // 1-indexed position in list
         final headerDate = dt != null
             ? DateFormat('dd MMM yyyy  •  hh:mm a').format(dt)
-            : 'Unknown date';
+            : loc.unknownDate;
         final diagPreview = (r['ai_diagnosis'] ?? '').toString().trim();
         final hasContent = [
           r['ai_diagnosis'],
@@ -560,16 +623,16 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         ].any((v) => v != null && v.toString().trim().isNotEmpty);
 
         return GestureDetector(
-          onTap: () => _openReportDetail(r, visitNum, dt),
+          onTap: () => _openReportDetail(r, visitNum, dt, loc),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _T.bgCard,
+              color: _thDt.bgCard,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _T.divider),
+              border: Border.all(color: _thDt.divider),
               boxShadow: [
                 BoxShadow(
-                  color: _T.navy.withOpacity(0.05),
+                  color: _T.navy.withValues(alpha:0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -600,20 +663,20 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Visit #$visitNum  ·  $headerDate',
-                            style: const TextStyle(
+                            loc.visitNumHeader(visitNum, headerDate),
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: _T.textH,
+                              color: _thDt.textH,
                             ),
                           ),
                           if (diagPreview.isNotEmpty) ...[
                             const SizedBox(height: 3),
                             Text(
                               diagPreview,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: _T.textS,
+                                color: _thDt.textS,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -622,9 +685,9 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                         ],
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
-                      color: _T.textM,
+                      color: _thDt.textM,
                       size: 20,
                     ),
                   ],
@@ -632,7 +695,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                 // ── Content pills ─────────────────────────────────────────
                 if (hasContent) ...[
                   const SizedBox(height: 10),
-                  const Divider(height: 1, color: _T.divider),
+                  Divider(height: 1, color: _thDt.divider),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -640,28 +703,32 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                     children: [
                       if ((r['ai_diagnosis'] ?? '').toString().isNotEmpty)
                         _ReportPill(
-                          'Diagnosis',
+                          loc.pillDiagnosis,
                           _T.navy,
                           const Color(0xFFEFF4FB),
                         ),
                       if (r['ai_medications'] is List &&
                           (r['ai_medications'] as List).isNotEmpty)
                         _ReportPill(
-                          'Medications',
+                          loc.pillMedications,
                           const Color(0xFF6A1B9A),
                           const Color(0xFFF3E5F5),
                         ),
                       if (r['ai_recommendations'] is List &&
                           (r['ai_recommendations'] as List).isNotEmpty)
-                        _ReportPill('Treatment', _T.teal, _T.tealPale),
+                        _ReportPill(loc.pillTreatment, _T.teal, _T.tealPale),
                       if ((r['ai_follow_up'] ?? '').toString().isNotEmpty)
                         _ReportPill(
-                          'Follow-up',
+                          loc.pillFollowUp,
                           const Color(0xFFE65100),
                           const Color(0xFFFFF3E0),
                         ),
                       if ((r['doctor_notes'] ?? '').toString().isNotEmpty)
-                        _ReportPill('Notes', _T.textS, const Color(0xFFF5F7FA)),
+                        _ReportPill(
+                          loc.pillNotes,
+                          _thDt.textS,
+                          const Color(0xFFF5F7FA),
+                        ),
                     ],
                   ),
                 ],
@@ -673,9 +740,265 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
     );
   }
 
+  // ── Lab History tab ──────────────────────────────────────────────────────────
+
+  Widget _labHistoryTab(ScrollController ctrl, AppLocalizations loc) {
+    if (_loadingLabHistory) {
+      return const Center(
+        child: CircularProgressIndicator(color: _T.navy, strokeWidth: 2),
+      );
+    }
+
+    if (!_labHistoryLoaded) {
+      return Center(
+        child: OutlinedButton.icon(
+          onPressed: _loadLabHistory,
+          icon: const Icon(Icons.refresh_rounded, size: 16),
+          label: Text(loc.retry),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _T.navy,
+            side: const BorderSide(color: _T.navy),
+          ),
+        ),
+      );
+    }
+
+    if (_labHistory.isEmpty) {
+      return DoctorEmpty(
+        icon: Icons.science_outlined,
+        title: loc.noLabReportsYet,
+        sub: loc.noLabReportsYetSub,
+      );
+    }
+
+    final patientName =
+        '${widget.patient['first_name'] ?? ''} ${widget.patient['last_name'] ?? ''}'
+            .trim();
+    final patientId =
+        int.tryParse((widget.patient['id'] ?? '').toString()) ?? 0;
+
+    return ListView.separated(
+      controller: ctrl,
+      padding: const EdgeInsets.all(20),
+      itemCount: _labHistory.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (_, i) {
+        final group = _labHistory[i];
+        final visit = group['visit'] as Map<String, dynamic>;
+        final reports =
+            (group['reports'] as List).cast<Map<String, dynamic>>();
+
+        DateTime? visitDate;
+        try {
+          visitDate = DateTime.parse(
+            (visit['created_at'] ?? visit['start_time'] ?? '').toString(),
+          ).toLocal();
+        } catch (_) {}
+
+        return _buildLabHistoryGroup(
+          visit: visit,
+          reports: reports,
+          visitDate: visitDate,
+          patientName: patientName,
+          patientId: patientId,
+          loc: loc,
+        );
+      },
+    );
+  }
+
+  Widget _buildLabHistoryGroup({
+    required Map<String, dynamic> visit,
+    required List<Map<String, dynamic>> reports,
+    required DateTime? visitDate,
+    required String patientName,
+    required int patientId,
+    required AppLocalizations loc,
+  }) {
+    final dateStr = visitDate != null
+        ? DateFormat('dd MMM yyyy').format(visitDate)
+        : loc.unknownDate;
+    final timeStr = visitDate != null
+        ? DateFormat('hh:mm a').format(visitDate)
+        : '';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _thDt.bgCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _thDt.divider),
+        boxShadow: [
+          BoxShadow(
+            color: _T.navy.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Visit header ────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: _T.navy.withValues(alpha: 0.06),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.assignment_rounded,
+                  size: 15,
+                  color: _T.navy,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _thDt.textH,
+                        ),
+                      ),
+                      if (timeStr.isNotEmpty)
+                        Text(
+                          timeStr,
+                          style:
+                              TextStyle(fontSize: 11, color: _thDt.textS),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${reports.length} PDF',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD32F2F),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Reports list ────────────────────────────────────────────────
+          ...reports.map((r) {
+            final hasInterpretation =
+                (r['ai_interpreted_summary'] ?? '').toString().trim().isNotEmpty &&
+                !(r['ai_interpreted_summary'] ?? '')
+                    .toString()
+                    .trim()
+                    .startsWith('[');
+
+            return InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => LabReportViewerPage(
+                    report: r,
+                    patientName: patientName,
+                    patientId: patientId,
+                  ),
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: _thDt.divider),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEBEE),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.picture_as_pdf_rounded,
+                        color: Color(0xFFD32F2F),
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (r['test_name'] ?? '').toString().trim().isNotEmpty
+                                ? r['test_name'].toString()
+                                : loc.labReportViewerTitle,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _thDt.textH,
+                            ),
+                          ),
+                          if (hasInterpretation) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 12,
+                                  color: Color(0xFF6A1B9A),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  loc.aiInterpretationLabel,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF6A1B9A),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: _thDt.textM,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   // ── Open full report detail ───────────────────────────────────────────────
 
-  void _openReportDetail(Map<String, dynamic> r, int visitNum, DateTime? dt) {
+  void _openReportDetail(
+    Map<String, dynamic> r,
+    int visitNum,
+    DateTime? dt,
+    AppLocalizations loc,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -685,8 +1008,8 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
         maxChildSize: 0.95,
         minChildSize: 0.4,
         builder: (_, ctrl) => Container(
-          decoration: const BoxDecoration(
-            color: _T.bgCard,
+          decoration: BoxDecoration(
+            color: _thDt.bgCard,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -699,7 +1022,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: _T.divider,
+                      color: _thDt.divider,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -722,7 +1045,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Visit #$visitNum — Medical Report',
+                            loc.visitReportTitle(visitNum),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -735,7 +1058,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                                 'EEEE, dd MMM yyyy  •  hh:mm a',
                               ).format(dt),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.65),
+                                color: Colors.white.withValues(alpha:0.65),
                                 fontSize: 11,
                               ),
                             ),
@@ -760,36 +1083,36 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
                   children: [
                     _reportSection(
                       icon: Icons.medical_information_rounded,
-                      label: 'Diagnosis',
+                      label: loc.pillDiagnosis,
                       color: _T.navy,
                       bg: const Color(0xFFEFF4FB),
                       value: r['ai_diagnosis'],
                     ),
                     _reportSection(
                       icon: Icons.medication_rounded,
-                      label: 'Medications',
+                      label: loc.pillMedications,
                       color: const Color(0xFF6A1B9A),
                       bg: const Color(0xFFF3E5F5),
                       value: r['ai_medications'],
                     ),
                     _reportSection(
                       icon: Icons.healing_rounded,
-                      label: 'Treatment & Recommendations',
+                      label: loc.treatmentRecommendations,
                       color: _T.teal,
                       bg: _T.tealPale,
                       value: r['ai_recommendations'],
                     ),
                     _reportSection(
                       icon: Icons.event_repeat_rounded,
-                      label: 'Follow-up',
+                      label: loc.pillFollowUp,
                       color: const Color(0xFFE65100),
                       bg: const Color(0xFFFFF3E0),
                       value: r['ai_follow_up'],
                     ),
                     _reportSection(
                       icon: Icons.note_alt_rounded,
-                      label: 'Doctor Notes',
-                      color: _T.textS,
+                      label: loc.doctorNotesLabel,
+                      color: _thDt.textS,
                       bg: const Color(0xFFF5F7FA),
                       value: r['doctor_notes'],
                     ),
@@ -858,12 +1181,12 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: _T.bgCard,
+        color: _thDt.bgCard,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha:0.25)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.06),
+            color: color.withValues(alpha:0.06),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -901,11 +1224,7 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
             padding: const EdgeInsets.all(14),
             child: Text(
               formatted,
-              style: const TextStyle(
-                fontSize: 13,
-                color: _T.textH,
-                height: 1.7,
-              ),
+              style: TextStyle(fontSize: 13, color: _thDt.textH, height: 1.7),
             ),
           ),
         ],
@@ -915,15 +1234,87 @@ class _DoctorPatientDetailState extends ConsumerState<DoctorPatientDetail>
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  String _fmtDate(dynamic v) {
-    if (v == null) return '—';
+  // Extracts chronic condition names from the backend-provided patient_conditions
+  // array. Handles both flattened and nested condition response shapes.
+  static List<String> _chronicNames(Map<String, dynamic> patient) {
+    final raw = patient['patient_conditions'];
+    if (raw is! List) return [];
+    final result = <String>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final cat =
+          (item['category'] ?? (item['condition'] as Map?)?['category'] ?? '')
+              .toString()
+              .toUpperCase();
+      if (cat != 'CHRONIC') continue;
+      final name =
+          (item['name'] ?? (item['condition'] as Map?)?['name'] ?? '')
+              .toString();
+      if (name.isNotEmpty) result.add(name);
+    }
+    return result;
+  }
+
+  String _fmtDate(dynamic v, String dash) {
+    if (v == null) return dash;
     try {
       return DateFormat(
         'dd MMM yyyy',
       ).format(DateTime.parse(v.toString()).toLocal());
     } catch (_) {
-      return '—';
+      return dash;
     }
+  }
+}
+
+// ── Lab Reports Button (per-visit shortcut in the Visits tab) ────────────────
+
+class _LabReportsButton extends StatelessWidget {
+  final Map<String, dynamic> visit;
+  final String patientName;
+
+  const _LabReportsButton({required this.visit, required this.patientName});
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final visitId = int.tryParse((visit['id'] ?? 0).toString()) ?? 0;
+    if (visitId <= 0) return const SizedBox.shrink();
+    final patientId =
+        int.tryParse((visit['patient_id'] ?? 0).toString()) ?? 0;
+
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LabReportsPage(
+            visitId: visitId,
+            patientName: patientName,
+            patientId: patientId,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.science_outlined, size: 14, color: DoctorTheme.navy),
+          const SizedBox(width: 6),
+          Text(
+            loc.labReportsForVisit,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: DoctorTheme.navy,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 14,
+            color: DoctorTheme.navy,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -940,7 +1331,7 @@ class _ReportPill extends StatelessWidget {
     decoration: BoxDecoration(
       color: bg,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.3)),
+      border: Border.all(color: color.withValues(alpha:0.3)),
     ),
     child: Text(
       label,
@@ -961,35 +1352,38 @@ class DoctorIRow extends StatelessWidget {
   const DoctorIRow(this.label, this.value, {Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 108,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: _T.textS,
+  Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: dt.textS,
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            value.isEmpty ? '—' : value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: _T.textH,
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: dt.textH,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 // ── Condition Chip (kept for potential future use elsewhere) ──────────────────
@@ -1006,7 +1400,7 @@ class DoctorCondChip extends StatelessWidget {
     decoration: BoxDecoration(
       color: _T.urgentBg,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: _T.urgent.withOpacity(0.3)),
+      border: Border.all(color: _T.urgent.withValues(alpha:0.3)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,

@@ -3,6 +3,9 @@
 //
 // Persists clinic-level UI preferences (fee defaults, etc.) locally.
 // Uses shared_preferences — no backend call needed for these values.
+//
+// CHANGE: added getString() — a generic string reader used by
+// locale_provider.dart to restore the saved language on app start.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +24,13 @@ class SettingsService {
   static Future<double> getRevisitFee({double fallback = 100.0}) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_keyRevisitFee) ?? fallback;
+  }
+
+  /// Generic string reader — used by locale_provider.dart (and anything else
+  /// that just needs a single saved string value back).
+  static Future<String?> getString(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(key);
   }
 
   // ── Write ───────────────────────────────────────────────────────────────────
@@ -54,9 +64,6 @@ class SettingsService {
     return {
       'consultation': prefs.getDouble(_keyConsultFee) ?? 200.0,
       'revisit': prefs.getDouble(_keyRevisitFee) ?? 100.0,
-      'notif_appointments': prefs.getBool('notif_appointments') ?? true,
-      'notif_urgent': prefs.getBool('notif_urgent') ?? true,
-      'notif_daily_summary': prefs.getBool('notif_daily_summary') ?? false,
       'language': prefs.getString('language') ?? 'English',
       'dark_mode': prefs.getBool('dark_mode') ?? false,
     };

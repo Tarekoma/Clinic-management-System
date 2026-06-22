@@ -1,12 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/views/doctor/doctor_finance_page.dart
+//
+// CHANGES IN THIS VERSION:
+//   • _buildRow no longer does:
+//        a['appointment_type_name'] ?? a['appointment_type'] ?? 'Consultation'
+//     which printed a raw Map (e.g. "id: 1, name: ..., duration_minutes: 30")
+//     whenever appointment_type_name was null and appointment_type was a Map.
+//     Replaced with _resolveType(), same safe pattern used in
+//     doctor_appt_card.dart.
+//   • DateFormat('dd MMM') now passes the active locale.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/providers/doctor_providers.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 import 'package:Hakim/widgets/doctor/doctor_consultation_widgets.dart';
 import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
@@ -21,10 +32,50 @@ class DoctorFinancePage extends ConsumerStatefulWidget {
 }
 
 class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
+  late DoctorThemeData _dt; // injected in build()
   bool _unpaidOnly = false;
+
+  // ── Safe appointment-type resolver ─────────────────────────────────────
+  // Handles three shapes: null, a Map ({id, name, duration_minutes, ...}),
+  // or a plain String. Never falls through to a raw Map.toString().
+  // Also maps known backend type-name strings (English, from the API) to
+  // their localized equivalent, since the backend itself isn't localized.
+  String _resolveType(dynamic raw, AppLocalizations loc) {
+    String extracted;
+    if (raw == null) {
+      extracted = loc.consultationDefault;
+    } else if (raw is Map) {
+      extracted = (raw['name'] ?? raw['title'] ?? loc.consultationDefault)
+          .toString();
+    } else {
+      final s = raw.toString().trim();
+      extracted = s.isEmpty ? loc.consultationDefault : s;
+    }
+    return _localizeTypeName(extracted, loc);
+  }
+
+  // ── Maps a known backend type-name string to its localized label.
+  // Falls back to the original string for any type name not in this list
+  // (e.g. custom appointment types added by the doctor).
+  String _localizeTypeName(String name, AppLocalizations loc) {
+    switch (name.trim().toLowerCase()) {
+      case 'initial consultation':
+        return loc.initialConsultation;
+      case 'consultation':
+        return loc.visitTypeConsultation;
+      case 'revisit':
+      case 're-visit':
+        return loc.visitTypeRevisit;
+      default:
+        return name;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    _dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final localeCode = Localizations.localeOf(context).languageCode;
     final state = ref.watch(doctorViewModelProvider);
     final vm = ref.read(doctorViewModelProvider.notifier);
     final loading = state.loadingAppointments;
@@ -47,7 +98,7 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Total Revenue',
+                  loc.totalRevenue,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 13,
@@ -55,7 +106,7 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${s['total']!.toStringAsFixed(0)} EGP',
+                  '${arNumber(s['total']!, localeCode)} ${loc.currencyEgp}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 30,
@@ -68,8 +119,9 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                   children: [
                     Expanded(
                       child: DoctorFinChip(
-                        label: 'Collected',
-                        value: '${s['paid']!.toStringAsFixed(0)} EGP',
+                        label: loc.collected,
+                        value:
+                            '${arNumber(s['paid']!, localeCode)} ${loc.currencyEgp}',
                         icon: Icons.check_circle_rounded,
                         color: const Color(0xFF69F0AE),
                       ),
@@ -77,8 +129,9 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DoctorFinChip(
-                        label: 'Outstanding',
-                        value: '${s['unpaid']!.toStringAsFixed(0)} EGP',
+                        label: loc.outstanding,
+                        value:
+                            '${arNumber(s['unpaid']!, localeCode)} ${loc.currencyEgp}',
                         icon: Icons.pending_rounded,
                         color: const Color(0xFFFFD54F),
                       ),
@@ -94,23 +147,23 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
           // ── Collection rate ───────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: _T.card(),
+            decoration: _T.cardOf(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Text(
-                      'Collection Rate',
+                    Text(
+                      loc.collectionRate,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: _T.textH,
+                        color: _dt.textH,
                       ),
                     ),
                     const Spacer(),
                     Text(
-                      '${(rate * 100).toStringAsFixed(0)}%',
+                      '${arNumber((rate * 100).round(), localeCode)}%',
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -125,7 +178,7 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                   child: LinearProgressIndicator(
                     value: rate,
                     minHeight: 10,
-                    backgroundColor: _T.bgInput,
+                    backgroundColor: _dt.bgInput,
                     valueColor: const AlwaysStoppedAnimation<Color>(_T.teal),
                   ),
                 ),
@@ -138,12 +191,12 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
           // ── List header ───────────────────────────────────────────────────
           Row(
             children: [
-              const Text(
-                'Payment Records',
+              Text(
+                loc.paymentRecords,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: _T.textH,
+                  color: _dt.textH,
                 ),
               ),
               const Spacer(),
@@ -155,20 +208,20 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: _unpaidOnly ? _T.warningBg : _T.bgInput,
+                    color: _unpaidOnly ? _T.warningBg : _dt.bgInput,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: _unpaidOnly
                           ? _T.warning.withOpacity(0.4)
-                          : _T.divider,
+                          : _dt.divider,
                     ),
                   ),
                   child: Text(
-                    'Unpaid only',
+                    loc.unpaidOnly,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _unpaidOnly ? _T.warning : _T.textS,
+                      color: _unpaidOnly ? _T.warning : _dt.textS,
                     ),
                   ),
                 ),
@@ -189,33 +242,44 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
               ),
             )
           else if (list.isEmpty)
-            const DoctorEmpty(
+            DoctorEmpty(
               icon: Icons.receipt_long_outlined,
-              title: 'No payment records',
-              sub: 'Payments appear here after booking.',
+              title: loc.noPaymentRecords,
+              sub: loc.noPaymentRecordsSub,
             )
           else
-            ...list.map((a) => _buildRow(a, vm)),
+            ...list.map((a) => _buildRow(a, vm, loc, localeCode)),
         ],
       ),
     );
   }
 
-  Widget _buildRow(Map<String, dynamic> a, DoctorViewModel vm) {
+  Widget _buildRow(
+    Map<String, dynamic> a,
+    DoctorViewModel vm,
+    AppLocalizations loc,
+    String localeCode,
+  ) {
     DateTime? dt;
     try {
       dt = DateTime.parse(a['start_time'].toString()).toLocal();
     } catch (_) {}
     final isPaid = a['is_paid'] == true;
     final fee = double.tryParse((a['fee'] ?? 0).toString()) ?? 0.0;
-    final type =
-        a['appointment_type_name'] ?? a['appointment_type'] ?? 'Consultation';
+
+    // FIXED: was `a['appointment_type_name'] ?? a['appointment_type'] ?? 'Consultation'`
+    // which printed a raw Map.toString() whenever appointment_type was a Map
+    // and appointment_type_name was null (the "id: 1, name: ..." bug).
+    final type = _resolveType(
+      a['appointment_type_name'] ?? a['appointment_type'],
+      loc,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _T.bgCard,
+        color: _dt.bgCard,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isPaid
@@ -252,10 +316,10 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
               children: [
                 Text(
                   vm.apptName(a),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _T.textH,
+                    color: _dt.textH,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -263,9 +327,13 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                 Text(
                   [
                     type,
-                    if (dt != null) DateFormat('dd MMM').format(dt),
+                    if (dt != null)
+                      arDigits(
+                        DateFormat('dd MMM', localeCode).format(dt),
+                        localeCode,
+                      ),
                   ].join('  •  '),
-                  style: const TextStyle(fontSize: 11, color: _T.textS),
+                  style: TextStyle(fontSize: 11, color: _dt.textS),
                 ),
               ],
             ),
@@ -274,7 +342,7 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${fee.toStringAsFixed(0)} EGP',
+                '${arNumber(fee, localeCode)} ${loc.currencyEgp}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -289,7 +357,7 @@ class _DoctorFinancePageState extends ConsumerState<DoctorFinancePage> {
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  isPaid ? 'PAID' : 'UNPAID',
+                  isPaid ? loc.paidBadge : loc.unpaidBadge,
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w800,

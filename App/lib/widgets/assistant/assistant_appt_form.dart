@@ -2,7 +2,9 @@
 // lib/widgets/assistant/assistant_appt_form.dart
 // ─────────────────────────────────────────────────────────────────────────────
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/services/settings_service.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:Hakim/utils/assistant_theme.dart';
@@ -33,6 +35,9 @@ class AssistantApptForm extends StatefulWidget {
   /// field is pre-filled and locked — no search required.
   final Map<String, dynamic>? preSelectedPatient;
 
+  /// All existing appointments — used for client-side overlap detection.
+  final List<Map<String, dynamic>> existingAppointments;
+
   const AssistantApptForm({
     this.existing,
     this.preSelectedPatient,
@@ -43,6 +48,7 @@ class AssistantApptForm extends StatefulWidget {
     required this.snack,
     required this.onSubmit,
     required this.patName,
+    this.existingAppointments = const [],
     Key? key,
   }) : super(key: key);
 
@@ -80,7 +86,7 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
       ? widget.appointmentTypes
       : List<Map<String, dynamic>>.from(_fallbackTypes);
 
-  // ── helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   IconData _iconForType(String name) {
     final n = name.toLowerCase();
     if (n.contains('revisit') || n.contains('follow')) {
@@ -92,6 +98,13 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
   bool _isRevisitType(Map<String, dynamic> type) {
     final name = (type['name'] ?? '').toString().toLowerCase();
     return name.contains('revisit') || name.contains('follow');
+  }
+
+  String _localizeTypeName(String name, AppLocalizations loc) {
+    final n = name.toLowerCase();
+    if (n.contains('revisit') || n.contains('follow')) return loc.visitTypeRevisit;
+    if (n.contains('consult')) return loc.visitTypeConsultation;
+    return name;
   }
 
   @override
@@ -161,7 +174,11 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
 
   // ── Date / time picker ──────────────────────────────────────────────────────
   Future<void> _pickDate() async {
+    // Capture before async gaps to avoid use-after-deactivation.
+    final loc = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context);
     final now = DateTime.now();
+
     final d = await showDatePicker(
       context: context,
       initialDate: _date.isAfter(now)
@@ -169,10 +186,11 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
           : now.add(const Duration(hours: 1)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
+      locale: locale,
       builder: (ctx, child) => Theme(
-        data: Theme.of(
-          ctx,
-        ).copyWith(colorScheme: const ColorScheme.light(primary: _T.green)),
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: _T.green),
+        ),
         child: child!,
       ),
     );
@@ -184,9 +202,9 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
           ? TimeOfDay.fromDateTime(_date)
           : TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
       builder: (ctx, child) => Theme(
-        data: Theme.of(
-          ctx,
-        ).copyWith(colorScheme: const ColorScheme.light(primary: _T.green)),
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: _T.green),
+        ),
         child: child!,
       ),
     );
@@ -195,10 +213,7 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
     final picked = DateTime(d.year, d.month, d.day, t.hour, t.minute);
 
     if (picked.isBefore(now)) {
-      widget.snack(
-        'Selected time is in the past. Please choose a future time.',
-        err: true,
-      );
+      widget.snack(loc.selectedTimeInPast, err: true);
       return;
     }
 
@@ -209,10 +224,34 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
     });
   }
 
+  bool _hasConflict(DateTime proposed) {
+    const window = Duration(minutes: 45);
+    final existingId = widget.existing != null
+        ? int.tryParse(widget.existing!['id'].toString())
+        : null;
+    for (final a in widget.existingAppointments) {
+      final status = (a['status'] ?? '').toString().toUpperCase();
+      if (status == 'CANCELLED' || status == 'NO_SHOW') continue;
+      final id = int.tryParse(a['id'].toString());
+      if (id != null && id == existingId) continue;
+      DateTime? start;
+      try {
+        start = DateTime.parse(a['start_time'].toString()).toLocal();
+      } catch (_) {
+        continue;
+      }
+      final diff = proposed.difference(start).abs();
+      if (diff < window) return true;
+    }
+    return false;
+  }
+
   // ── Save ────────────────────────────────────────────────────────────────────
   Future<void> _save() async {
+    final loc = AppLocalizations.of(context)!;
+
     if (_selPatient == null) {
-      widget.snack('Please select a patient', err: true);
+      widget.snack(loc.pleaseSelectPatient, err: true);
       return;
     }
 
@@ -229,10 +268,11 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
       final today = DateTime(now.year, now.month, now.day);
       final dtDateOnly = DateTime(dt.year, dt.month, dt.day);
       if (dtDateOnly.isBefore(today)) {
-        widget.snack(
-          'Appointment time must be in the future. Please pick a later time.',
-          err: true,
-        );
+        widget.snack(loc.appointmentTimeMustBeFuture, err: true);
+        return;
+      }
+      if (_hasConflict(dt)) {
+        widget.snack(loc.appointmentSlotConflict, err: true);
         return;
       }
     }
@@ -293,6 +333,10 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
   // ── Build ───────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final lc = Localizations.localeOf(context).languageCode;
+
     final dateTime = DateTime(
       _date.year,
       _date.month,
@@ -304,8 +348,8 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
     final types = _effectiveTypes;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: _T.bgCard,
+      decoration: BoxDecoration(
+        color: at.bgCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -328,7 +372,7 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _T.divider,
+                  color: at.divider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -336,11 +380,13 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             const SizedBox(height: 20),
 
             Text(
-              widget.existing != null ? 'Edit Appointment' : 'New Appointment',
-              style: const TextStyle(
+              widget.existing != null
+                  ? loc.editAppointmentTitle
+                  : loc.newAppointment,
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: _T.textH,
+                color: at.textH,
               ),
             ),
             const SizedBox(height: 20),
@@ -357,12 +403,12 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             const SizedBox(height: 14),
 
             // ── Visit Type ───────────────────────────────────────────────
-            const Text(
-              'Visit Type',
+            Text(
+              loc.visitType,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: _T.textS,
+                color: at.textS,
               ),
             ),
             const SizedBox(height: 8),
@@ -386,8 +432,8 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
                     ),
                     child: _VisitTypeCard(
                       icon: _iconForType(type['name'] ?? ''),
-                      label: type['name'] ?? '',
-                      price: '$fee EGP',
+                      label: _localizeTypeName(type['name'] ?? '', loc),
+                      price: arDigits('$fee ${loc.currencyEgp}', lc),
                       selected: isSelected,
                       onTap: () {
                         // Save whatever user typed into the current type
@@ -418,17 +464,17 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             GestureDetector(
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: _T.inp(
-                  'Date & Time',
-                  pre: const Icon(
-                    Icons.event_rounded,
-                    size: 18,
-                    color: _T.textM,
-                  ),
+                decoration: _T.inpOf(
+                  context,
+                  loc.dateTimeLabel,
+                  pre: Icon(Icons.event_rounded, size: 18, color: at.textM),
                 ),
                 child: Text(
-                  DateFormat('dd MMM yyyy  •  hh:mm a').format(dateTime),
-                  style: const TextStyle(fontSize: 13, color: _T.textH),
+                  arDigits(
+                    DateFormat('dd MMM yyyy  •  hh:mm a', lc).format(dateTime),
+                    lc,
+                  ),
+                  style: TextStyle(fontSize: 13, color: at.textH),
                 ),
               ),
             ),
@@ -438,13 +484,10 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             TextField(
               controller: _feeCtrl,
               keyboardType: TextInputType.number,
-              decoration: _T.inp(
-                'Fee (EGP)',
-                pre: const Icon(
-                  Icons.payments_outlined,
-                  size: 18,
-                  color: _T.textM,
-                ),
+              decoration: _T.inpOf(
+                context,
+                loc.feeEgpLabel,
+                pre: Icon(Icons.payments_outlined, size: 18, color: at.textM),
               ),
             ),
             const SizedBox(height: 14),
@@ -453,13 +496,13 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             TextField(
               controller: _reasonCtrl,
               maxLines: 2,
-              decoration: _T.inp('Reason / Notes (optional)'),
+              decoration: _T.inpOf(context, loc.reasonNotesOptional),
             ),
             const SizedBox(height: 14),
 
             // ── Toggles ──────────────────────────────────────────────────
             _ToggleRow(
-              label: 'Mark as Paid',
+              label: loc.markAsPaid,
               icon: Icons.payments_rounded,
               value: _isPaid,
               color: _T.success,
@@ -468,7 +511,7 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
             ),
             const SizedBox(height: 10),
             _ToggleRow(
-              label: 'Mark as Urgent',
+              label: loc.markAsUrgent,
               icon: Icons.warning_amber_rounded,
               value: _isUrgent,
               color: _T.urgent,
@@ -502,8 +545,8 @@ class _AssistantApptFormState extends State<AssistantApptForm> {
                       )
                     : Text(
                         widget.existing != null
-                            ? 'Save Changes'
-                            : 'Book Appointment',
+                            ? loc.saveChanges
+                            : loc.bookAppointment,
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -544,16 +587,17 @@ class _VisitTypeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         decoration: BoxDecoration(
-          color: selected ? _T.green.withOpacity(0.10) : _T.bgInput,
+          color: selected ? _T.green.withOpacity(0.10) : at.bgInput,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? _T.green : _T.divider,
+            color: selected ? _T.green : at.divider,
             width: selected ? 1.5 : 1.0,
           ),
         ),
@@ -565,13 +609,13 @@ class _VisitTypeCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected
                     ? _T.green.withOpacity(0.15)
-                    : _T.divider.withOpacity(0.5),
+                    : at.divider.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
                 size: 17,
-                color: selected ? _T.green : _T.textM,
+                color: selected ? _T.green : at.textM,
               ),
             ),
             const SizedBox(width: 8),
@@ -585,7 +629,7 @@ class _VisitTypeCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: selected ? _T.green : _T.textS,
+                      color: selected ? _T.green : at.textS,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -594,7 +638,7 @@ class _VisitTypeCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: selected ? _T.green.withOpacity(0.8) : _T.textM,
+                      color: selected ? _T.green.withOpacity(0.8) : at.textM,
                     ),
                   ),
                 ],
@@ -656,19 +700,6 @@ class _AssistantPatientSearchFieldState
     super.dispose();
   }
 
-  void _snack(String msg, {bool err = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: err ? _T.urgent : _T.green,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
   void _search(String q) {
     final query = q.toLowerCase().trim();
     if (query.isEmpty) {
@@ -712,20 +743,20 @@ class _AssistantPatientSearchFieldState
 
   @override
   Widget build(BuildContext context) {
+    final at = Theme.of(context).extension<AssistantThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
     final selected = widget.selectedPatient;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
           controller: _ctrl,
           readOnly: widget.locked,
-          decoration: _T.inp(
-            'Search patient by name, phone or ID...',
-            pre: const Icon(
-              Icons.person_search_rounded,
-              size: 18,
-              color: _T.textM,
-            ),
+          decoration: _T.inpOf(
+            context,
+            loc.searchPatientNameFull,
+            pre: Icon(Icons.person_search_rounded, size: 18, color: at.textM),
             suf: (!widget.locked && _ctrl.text.isNotEmpty)
                 ? IconButton(
                     icon: const Icon(Icons.clear_rounded, size: 18),
@@ -763,7 +794,7 @@ class _AssistantPatientSearchFieldState
                 if ((selected['phone'] ?? '').toString().isNotEmpty)
                   Text(
                     selected['phone'].toString(),
-                    style: const TextStyle(fontSize: 11, color: _T.textS),
+                    style: TextStyle(fontSize: 11, color: at.textS),
                   ),
               ],
             ),
@@ -775,9 +806,9 @@ class _AssistantPatientSearchFieldState
           const SizedBox(height: 4),
           Container(
             decoration: BoxDecoration(
-              color: _T.bgCard,
+              color: at.bgCard,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _T.divider),
+              border: Border.all(color: at.divider),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.08),
@@ -788,11 +819,11 @@ class _AssistantPatientSearchFieldState
             ),
             constraints: const BoxConstraints(maxHeight: 220),
             child: _results.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Text(
-                      'No patients found',
-                      style: TextStyle(fontSize: 13, color: _T.textS),
+                      loc.noPatientsFoundShort,
+                      style: TextStyle(fontSize: 13, color: at.textS),
                     ),
                   )
                 : ListView.separated(
@@ -800,7 +831,7 @@ class _AssistantPatientSearchFieldState
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     itemCount: _results.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: _T.divider),
+                        Divider(height: 1, color: at.divider),
                     itemBuilder: (_, i) {
                       final p = _results[i];
                       final name = widget.patName(p);
@@ -823,10 +854,10 @@ class _AssistantPatientSearchFieldState
                                   children: [
                                     Text(
                                       name,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
-                                        color: _T.textH,
+                                        color: at.textH,
                                       ),
                                     ),
                                     if (phone.isNotEmpty || nid.isNotEmpty)
@@ -834,17 +865,17 @@ class _AssistantPatientSearchFieldState
                                         [phone, nid]
                                             .where((s) => s.isNotEmpty)
                                             .join('  •  '),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: _T.textS,
+                                          color: at.textS,
                                         ),
                                       ),
                                   ],
                                 ),
                               ),
-                              const Icon(
+                              Icon(
                                 Icons.chevron_right_rounded,
-                                color: _T.textM,
+                                color: at.textM,
                                 size: 18,
                               ),
                             ],

@@ -1,15 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/widgets/doctor/doctor_appt_card.dart
-//
-// DoctorApptCard, DoctorMiniChip, DoctorActBtn
-//
-// CHANGE: Removed `onStatus` / "Done" button.
-//         Added `onDetails` / "Details" button that opens patient info sheet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:intl/intl.dart';
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 
 typedef _T = DoctorTheme;
@@ -22,22 +20,17 @@ class DoctorApptCard extends StatelessWidget {
   final Map<String, dynamic> appt;
   final VoidCallback onStart;
   final VoidCallback onEdit;
-
-  /// Opens the patient-information bottom sheet.
   final VoidCallback onDetails;
-
-  final VoidCallback onDelete;
+  final VoidCallback? onCancel;
 
   const DoctorApptCard({
     required this.appt,
     required this.onStart,
     required this.onEdit,
-    required this.onDetails, // ← replaces onStatus
-    required this.onDelete,
-    Key? key,
-  }) : super(key: key);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
+    required this.onDetails,
+    this.onCancel,
+    super.key,
+  });
 
   DateTime? _dt(dynamic v) {
     if (v == null) return null;
@@ -48,35 +41,67 @@ class DoctorApptCard extends StatelessWidget {
     }
   }
 
-  String get _name {
+  String _name(AppLocalizations loc) {
     final fn =
         appt['patient_first_name'] ?? appt['patient']?['first_name'] ?? '';
     final ln = appt['patient_last_name'] ?? appt['patient']?['last_name'] ?? '';
-    return '$fn $ln'.trim().ifEmpty('Unknown Patient');
+    return '$fn $ln'.trim().ifEmpty(loc.unknownPatient);
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  String _resolveType(dynamic raw, AppLocalizations loc) {
+    String extracted;
+    if (raw == null) {
+      extracted = loc.consultationDefault;
+    } else if (raw is Map) {
+      extracted = (raw['name'] ?? raw['title'] ?? loc.consultationDefault)
+          .toString();
+    } else {
+      final s = raw.toString().trim();
+      extracted = s.isEmpty ? loc.consultationDefault : s;
+    }
+    return _localizeTypeName(extracted, loc);
+  }
+
+  String _localizeTypeName(String name, AppLocalizations loc) {
+    switch (name.trim().toLowerCase()) {
+      case 'initial consultation':
+        return loc.initialConsultation;
+      case 'consultation':
+        return loc.visitTypeConsultation;
+      case 'revisit':
+      case 're-visit':
+        return loc.visitTypeRevisit;
+      default:
+        return name;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final themeData = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context)!;
+    final localeCode = Localizations.localeOf(context).languageCode;
     final dt = _dt(appt['start_time']);
     final status = (appt['status'] ?? 'SCHEDULED').toUpperCase();
     final urgent = appt['is_urgent'] == true;
-    final type =
-        appt['appointment_type_name'] ??
-        appt['appointment_type'] ??
-        'Consultation';
+    final name = _name(loc);
+    final type = _resolveType(
+      appt['appointment_type_name'] ?? appt['appointment_type'],
+      loc,
+    );
     final phone = appt['patient_phone'] ?? appt['patient']?['phone'] ?? '';
     final fee = double.tryParse((appt['fee'] ?? 0).toString()) ?? 0.0;
     final isPaid = appt['is_paid'] == true;
     final canStart = status == 'SCHEDULED' || status == 'IN_PROGRESS';
+    final canCancel =
+        (status == 'SCHEDULED' || status == 'IN_PROGRESS') && onCancel != null;
 
     return Container(
       decoration: BoxDecoration(
-        color: _T.bgCard,
-        borderRadius: BorderRadius.circular(16),
+        color: themeData.bgCard,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: urgent ? _T.urgent.withOpacity(0.35) : _T.divider,
+          color: urgent ? _T.urgent.withOpacity(0.35) : themeData.divider,
           width: urgent ? 1.5 : 1,
         ),
         boxShadow: [
@@ -89,9 +114,9 @@ class DoctorApptCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Main row ──────────────────────────────────────────────────────
+          // ── Main row ────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(10),
             child: Row(
               children: [
                 // Time column
@@ -107,25 +132,30 @@ class DoctorApptCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      dt != null ? DateFormat('hh:mm').format(dt) : '--:--',
-                      style: const TextStyle(
+                      dt != null
+                          ? arDigits(
+                              DateFormat('hh:mm', localeCode).format(dt),
+                              localeCode,
+                            )
+                          : '--:--',
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: _T.navy,
+                        color: themeData.accent,
                       ),
                     ),
                     Text(
-                      dt != null ? DateFormat('a').format(dt) : '',
-                      style: const TextStyle(
+                      dt != null ? DateFormat('a', localeCode).format(dt) : '',
+                      style: TextStyle(
                         fontSize: 10,
-                        color: _T.textM,
+                        color: themeData.textM,
                         letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(width: 12),
-                Container(width: 1, height: 52, color: _T.divider),
+                Container(width: 1, height: 44, color: themeData.divider),
                 const SizedBox(width: 12),
                 // Patient info
                 Expanded(
@@ -134,27 +164,30 @@ class DoctorApptCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          DoctorAvatar(name: _name, size: 36),
+                          DoctorAvatar(name: name, size: 30),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _name,
-                                  style: const TextStyle(
+                                  name,
+                                  style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: _T.textH,
+                                    color: themeData.textH,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 if (phone.isNotEmpty)
-                                  Text(
-                                    phone,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: _T.textS,
+                                  Directionality(
+                                    textDirection: material.TextDirection.ltr,
+                                    child: Text(
+                                      phone,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: themeData.textS,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -163,20 +196,21 @@ class DoctorApptCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 9),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           DoctorMiniChip(
                             icon: Icons.medical_services_outlined,
                             label: type,
                           ),
-                          if (fee > 0) ...[
-                            const SizedBox(width: 6),
+                          if (fee > 0)
                             DoctorMiniChip(
                               icon: Icons.payments_outlined,
-                              label: '${fee.toStringAsFixed(0)} EGP',
+                              label:
+                                  '${arNumber(fee, localeCode)} ${loc.currencyEgp}',
                               color: isPaid ? _T.success : _T.warning,
                             ),
-                          ],
                         ],
                       ),
                     ],
@@ -187,14 +221,14 @@ class DoctorApptCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     DoctorBadge(
-                      label: _T.sLabel(status),
+                      label: _T.sLabel(status, loc),
                       fg: _T.sFg(status),
                       bg: _T.sBg(status),
                     ),
                     if (urgent) ...[
                       const SizedBox(height: 4),
-                      const DoctorBadge(
-                        label: 'URGENT',
+                      DoctorBadge(
+                        label: loc.urgentBadge,
                         fg: _T.urgent,
                         bg: _T.urgentBg,
                       ),
@@ -204,69 +238,76 @@ class DoctorApptCard extends StatelessWidget {
               ],
             ),
           ),
-          // ── Action row ────────────────────────────────────────────────────
+          // ── Action footer ───────────────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: const BoxDecoration(
-              color: _T.bgInput,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(14)),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: themeData.bgInput,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(10),
+              ),
             ),
             child: Row(
               children: [
-                // Date label
-                if (dt != null) ...[
-                  const Icon(
-                    Icons.calendar_today_rounded,
-                    size: 11,
-                    color: _T.textM,
-                  ),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text(
-                      DateFormat('EEE, dd MMM yyyy').format(dt),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _T.textM,
-                        letterSpacing: 0.5,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                // Date — takes all remaining space and truncates gracefully
+                Icon(
+                  Icons.calendar_today_rounded,
+                  size: 11,
+                  color: themeData.textM,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    dt != null
+                        ? arDigits(
+                            DateFormat('EEE, dd MMM', localeCode).format(dt),
+                            localeCode,
+                          )
+                        : '',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: themeData.textM,
+                      letterSpacing: 0.4,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-                const SizedBox(width: 8),
-                // Action buttons
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                ),
+                // Action buttons — fixed, never expand
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (canStart)
+                    if (canStart) ...[
                       DoctorActBtn(
-                        label: 'Start',
+                        label: loc.actionStart,
                         icon: Icons.play_circle_rounded,
-                        color: _T.teal,
+                        color: themeData.accentTeal,
                         onTap: onStart,
                       ),
+                      _vDivider(themeData),
+                    ],
                     DoctorActBtn(
-                      label: 'Edit',
+                      label: loc.actionEdit,
                       icon: Icons.edit_rounded,
-                      color: _T.navyLight,
+                      color: themeData.accent,
                       onTap: onEdit,
                     ),
-                    // ── "Details" replaces the old "Done" button ──────────
+                    _vDivider(themeData),
                     DoctorActBtn(
-                      label: 'Details',
+                      label: loc.actionDetails,
                       icon: Icons.person_outline_rounded,
-                      color: _T.navy,
+                      color: themeData.accent,
                       onTap: onDetails,
                     ),
-                    DoctorActBtn(
-                      label: 'Delete',
-                      icon: Icons.delete_outline_rounded,
-                      color: _T.urgent,
-                      onTap: onDelete,
-                    ),
+                    if (canCancel) ...[
+                      _vDivider(themeData),
+                      DoctorActBtn(
+                        label: loc.cancel,
+                        icon: Icons.cancel_outlined,
+                        color: _T.urgent,
+                        onTap: onCancel!,
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -276,6 +317,13 @@ class DoctorApptCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _vDivider(DoctorThemeData dt) => Container(
+    width: 1,
+    height: 12,
+    margin: const EdgeInsets.symmetric(horizontal: 4),
+    color: dt.divider,
+  );
 }
 
 // ── MiniChip ──────────────────────────────────────────────────────────────────
@@ -283,30 +331,45 @@ class DoctorApptCard extends StatelessWidget {
 class DoctorMiniChip extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color color;
+  final Color? color;
+
   const DoctorMiniChip({
     required this.icon,
     required this.label,
-    this.color = _T.textS,
-    Key? key,
-  }) : super(key: key);
+    this.color,
+    super.key,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-    decoration: BoxDecoration(
-      color: _T.bgInput,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 11, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 10, color: color)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final themeData = Theme.of(context).extension<DoctorThemeData>()!;
+    final c = color ?? themeData.textS;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 160),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: themeData.bgInput,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: c),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 10, color: c),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Action Button ─────────────────────────────────────────────────────────────
@@ -321,8 +384,8 @@ class DoctorActBtn extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.onTap,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -333,12 +396,12 @@ class DoctorActBtn extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 3),
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: color,
             ),

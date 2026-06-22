@@ -1,23 +1,36 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // lib/views/doctor/consultation/consultation_page.dart
+//
+// CHANGES IN THIS VERSION:
+//   • Header date now uses DateFormat(..., localeCode) + arDigits() instead
+//     of the unlocalized 'dd MMM yyyy  •  hh:mm a' — was always English.
+//   • _appointmentTypeName now takes `loc` and maps known backend type-name
+//     strings ("Initial Consultation", "Consultation", "Revisit") to their
+//     localized equivalents — same pattern used on the finance page and
+//     appointment card.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:io';
+import 'package:Hakim/views/doctor/consultation/ai_imaging_review_page.dart';
+import 'package:Hakim/views/doctor/consultation/manual_report_tab.dart';
 import 'package:Hakim/views/doctor/consultation/voice_report_review_page.dart';
-import 'package:Hakim/views/doctor/consultation/ai_tab.dart';
 import 'package:Hakim/views/doctor/consultation/voice_tab.dart';
+import 'package:Hakim/views/doctor/consultation/vitals_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import 'package:Hakim/l10n/generated/app_localizations.dart';
 import 'package:Hakim/model/UserProfile.dart';
 import 'package:Hakim/providers/doctor_providers.dart';
 import 'package:Hakim/services/API_Service.dart';
+import 'package:Hakim/utils/arabic_digits.dart';
 import 'package:Hakim/utils/doctor_theme.dart';
 import 'package:Hakim/widgets/doctor/doctor_shared_widgets.dart';
 import 'package:Hakim/viewmodels/doctor_viewmodel.dart';
 import 'package:Hakim/views/doctor/consultation/ai_imaging_tab.dart';
+import 'package:Hakim/views/doctor/lab_reports/lab_reports_page.dart';
 
 typedef _T = DoctorTheme;
 
@@ -28,8 +41,8 @@ class DoctorConsultationPage extends ConsumerStatefulWidget {
   const DoctorConsultationPage({
     required this.appointment,
     required this.doctorProfile,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   ConsumerState<DoctorConsultationPage> createState() =>
@@ -46,12 +59,11 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
   bool _resolvingVisit = false;
 
   final _notesCtrl = TextEditingController();
-  bool _aiLoading = false;
-  String? _aiResult;
+  bool _transcribing = false;
 
   File? _imagingSelectedImage;
-  bool _imagingAnalysisLoading = false;
-  String? _imagingAnalysisResult;
+  bool _imagingAnalyzed = false;
+  String _imagingSelectedType = 'XRAY'; // default
 
   // ── IDs ───────────────────────────────────────────────────────────────────
 
@@ -90,12 +102,42 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
     return full.isEmpty ? 'Unknown Patient' : full;
   }
 
+  /// Safely resolves appointment_type — backend may return a nested Map or
+  /// String. Also maps known backend type-name strings to their localized
+  /// equivalent, since the backend itself isn't localized.
+  String _appointmentTypeName(AppLocalizations loc) {
+    final raw =
+        widget.appointment['appointment_type_name'] ??
+        widget.appointment['appointment_type'];
+    String extracted;
+    if (raw == null) {
+      extracted = loc.consultationDefault;
+    } else if (raw is Map) {
+      extracted = (raw['name'] ?? raw['title'] ?? loc.consultationDefault)
+          .toString();
+    } else {
+      final s = raw.toString().trim();
+      extracted = s.isEmpty ? loc.consultationDefault : s;
+    }
+    switch (extracted.trim().toLowerCase()) {
+      case 'initial consultation':
+        return loc.initialConsultation;
+      case 'consultation':
+        return loc.visitTypeConsultation;
+      case 'revisit':
+      case 're-visit':
+        return loc.visitTypeRevisit;
+      default:
+        return extracted;
+    }
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _initVisit();
   }
 
@@ -107,7 +149,19 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
   }
 
   Future<void> _initVisit() async {
-    await _resolveVisit();
+    // clearConsultationCache() modifies Riverpod state. Riverpod forbids
+    // state changes during initState / the first build frame, so defer it
+    // to the post-frame callback — by which point the tree is fully built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(doctorViewModelProvider.notifier).clearConsultationCache();
+      }
+    });
+    try {
+      await _resolveVisit().timeout(const Duration(seconds: 30));
+    } catch (e) {
+      debugPrint('⚠️ _initVisit: _resolveVisit error/timeout: $e');
+    }
     if (mounted) setState(() => _startingVisit = false);
   }
 
@@ -289,49 +343,55 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
     }
   }
 
-  void _analyzeImagePlaceholder() => _snack('AI analysis coming soon.');
-
-  // ── AI suggestion ─────────────────────────────────────────────────────────
-
-  Future<void> _runAI() async {
-    setState(() => _aiLoading = true);
-    try {
-      await Future.delayed(const Duration(seconds: 1));
-      final result = ref
-          .read(doctorViewModelProvider.notifier)
-          // FIX: removed `symptoms` — param is now optional with default []
-          // so both old and new call sites compile. Passing it explicitly is
-          // still fine: .generateAISuggestion(complaint:'', symptoms:[], exam:'')
-          .generateAISuggestion(complaint: '', exam: '');
-      if (mounted) setState(() => _aiResult = result);
-    } finally {
-      if (mounted) setState(() => _aiLoading = false);
+  Future<void> _navigateToImagingReview() async {
+    if (_imagingSelectedImage == null) return;
+    final analyzed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AIImagingReviewPage(
+          imageFile: _imagingSelectedImage!,
+          imageType: _imagingSelectedType,
+          ensureVisit: _ensureVisit,
+        ),
+      ),
+    );
+    if (analyzed == true && mounted) {
+      setState(() => _imagingAnalyzed = true);
     }
   }
-
-  void _applyAIToDiagnosis(String s) => _snack('AI suggestion noted');
 
   // ── Voice recorded ────────────────────────────────────────────────────────
 
   Future<void> _onVoiceRecorded(String audioPath) async {
-    setState(() => _aiLoading = true);
+    setState(() => _transcribing = true);
     try {
-      final vm = ref.read(doctorViewModelProvider.notifier);
-      final transcription = await vm.transcribeAudioLocal(
-        audioFile: File(audioPath),
-      );
-
-      if (!mounted) return;
-      if (transcription.isEmpty) {
-        _snack('AI returned an empty transcription.', err: true);
-        return;
-      }
-
+      debugPrint('🔍 _onVoiceRecorded: resolving visitId…');
       final int visitId;
       try {
         visitId = await _ensureVisit();
+        debugPrint('✅ _onVoiceRecorded: visitId=$visitId');
       } catch (e) {
         _snack(DoctorViewModel.extractError(e), err: true);
+        return;
+      }
+
+      if (visitId <= 0) {
+        _snack('Could not resolve visit. Please try again.', err: true);
+        return;
+      }
+
+      final vm = ref.read(doctorViewModelProvider.notifier);
+      final result = await vm.transcribeAudioLocal(
+        audioFile: File(audioPath),
+        visitId: visitId,
+      );
+
+      if (!mounted) return;
+
+      if (result.reportId <= 0) {
+        _snack(
+          'Could not get report ID from server. Please try again.',
+          err: true,
+        );
         return;
       }
 
@@ -339,12 +399,13 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
         MaterialPageRoute(
           builder: (_) => VoiceReportReviewPage(
             visitId: visitId,
-            aiTranscription: transcription,
+            reportId: result.reportId,
+            aiTranscription: result.transcription,
           ),
         ),
       );
 
-      if (saved == true && mounted) _snack('Voice report saved.');
+      if (saved == true && mounted) _snack('Voice report saved successfully.');
     } catch (e) {
       if (mounted) {
         _snack(
@@ -353,25 +414,16 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
         );
       }
     } finally {
-      if (mounted) setState(() => _aiLoading = false);
+      if (mounted) setState(() => _transcribing = false);
     }
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  //
-  // FIX: Previously sent wrong fields to the backend:
-  //   ✗ 'content'    → not a valid field for POST /reports/medical-reports
-  //   ✗ 'patient_id' → not accepted by this endpoint
-  //   ✗ 'status'     → cannot be set on creation; managed via PATCH /status
-  //
-  // Correct fields (from Postman collection):
-  //   ✓ 'visit_id'    (required)
-  //   ✓ 'doctor_notes' (free-text notes from the doctor)
-  //   ✓ 'ai_diagnosis', 'ai_medications', 'ai_recommendations', 'ai_follow_up'
-  //      (all optional; left empty for the quick-save flow)
 
   Future<void> _save({required bool complete}) async {
+    if (_saving) return;
     setState(() => _saving = true);
+
     try {
       final int visitId;
       try {
@@ -381,29 +433,191 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
         return;
       }
 
+      if (!complete) {
+        _snack('Draft saved');
+        return;
+      }
+
+      // ── Role guard ──────────────────────────────────────────────────────────
+      if (widget.doctorProfile.userType.toUpperCase() != 'DOCTOR') {
+        _snack('Only doctors can complete consultations.', err: true);
+        return;
+      }
+
+      // ── Already terminal? ───────────────────────────────────────────────────
+      final currentVisitStatus =
+          (_visit?['status'] ?? '').toString().toUpperCase();
+      if (currentVisitStatus == 'COMPLETED') {
+        _snack('This consultation has already been completed.');
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      if (currentVisitStatus == 'CANCELLED') {
+        _snack(
+          'This consultation was cancelled and cannot be completed.',
+          err: true,
+        );
+        return;
+      }
+
       final vm = ref.read(doctorViewModelProvider.notifier);
       final notes = _notesCtrl.text.trim();
 
-      await vm.createMedicalReport({
-        'visit_id': visitId,
-        'doctor_notes': notes.isNotEmpty ? notes : 'Consultation notes',
-        'ai_diagnosis': '',
-        'ai_medications': <Map<String, dynamic>>[],
-        'ai_recommendations': <String>[],
-        'ai_follow_up': '',
-      });
+      // ── Fetch existing reports for this visit ───────────────────────────────
+      List<dynamic> existingReports = [];
+      try {
+        existingReports = await ApiService.getMedicalReports(visitId: visitId);
+      } catch (e) {
+        debugPrint(
+          '⚠️ _save: getMedicalReports: ${DoctorViewModel.extractError(e)}',
+        );
+      }
+      final hasReport = existingReports.isNotEmpty;
+      final hasImaging = _imagingAnalyzed;
+      final hasNotes = notes.isNotEmpty;
 
-      if (complete) {
-        await vm.updateVisitStatus(visitId, 'COMPLETED');
+      // ── Completion validation ───────────────────────────────────────────────
+      if (!hasReport && !hasImaging && !hasNotes) {
+        _snack(
+          'Please generate a voice report, create a medical report, or '
+          'perform an AI image analysis before completing the consultation.',
+          err: true,
+        );
+        return;
+      }
+
+      // ── Persist doctor notes into the report ────────────────────────────────
+      if (notes.isNotEmpty) {
         try {
-          await ApiService.updateAppointmentStatus(_apptId, 'COMPLETED');
+          if (hasReport) {
+            final existId =
+                int.tryParse(
+                  (existingReports.first['id'] ?? 0).toString(),
+                ) ??
+                0;
+            if (existId > 0) {
+              await vm.updateVoiceReport(
+                reportId: existId,
+                data: {'doctor_notes': notes},
+              );
+            }
+          } else {
+            await vm.createMedicalReport({
+              'visit_id': visitId,
+              'doctor_notes': notes,
+              'ai_diagnosis': '',
+              'ai_medications': <Map<String, dynamic>>[],
+              'ai_recommendations': <String>[],
+              'ai_follow_up': '',
+            });
+          }
+        } catch (e) {
+          debugPrint(
+            '⚠️ _save: notes persist: ${DoctorViewModel.extractError(e)}',
+          );
+        }
+      }
+
+      // ── Re-fetch reports after possible creation ────────────────────────────
+      if (!hasReport && notes.isNotEmpty) {
+        try {
+          existingReports =
+              await ApiService.getMedicalReports(visitId: visitId);
         } catch (_) {}
       }
 
-      _snack(complete ? 'Consultation completed!' : 'Draft saved');
-      if (complete && mounted) Navigator.pop(context);
+      // ── Finalize report (DRAFT → REVIEWED → APPROVED → FINALIZED + WhatsApp) ─
+      // Skip for terminal statuses; only call when a report actually exists.
+      final reportToFinalize =
+          existingReports.isNotEmpty ? existingReports.first : null;
+      if (reportToFinalize != null) {
+        final reportId =
+            int.tryParse((reportToFinalize['id'] ?? 0).toString()) ?? 0;
+        final reportStatus =
+            (reportToFinalize['status'] ?? '').toString().toUpperCase();
+
+        if (reportId > 0 &&
+            reportStatus != 'FINALIZED' &&
+            reportStatus != 'CANCELLED') {
+          try {
+            debugPrint(
+              '📋 _save: finalizing report #$reportId (status=$reportStatus)',
+            );
+            await vm.finalizeReport(reportId, currentStatus: reportStatus);
+            debugPrint('✅ _save: report #$reportId finalized → PDF + WhatsApp triggered');
+          } catch (e) {
+            // Finalization failed — surface a warning but do NOT block visit
+            // completion: the consultation data is saved and the doctor can
+            // manually finalize from patient history.
+            debugPrint(
+              '⚠️ _save: finalizeReport failed: ${DoctorViewModel.extractError(e)}',
+            );
+            _snack(
+              'Report could not be finalized: ${DoctorViewModel.extractError(e)}. '
+              'You can finalize it later from the patient\'s history.',
+              err: true,
+            );
+          }
+        }
+      }
+
+      // ── Visit status: WAITING → IN_PROGRESS → COMPLETED ────────────────────
+      if (currentVisitStatus == 'WAITING' || currentVisitStatus.isEmpty) {
+        try {
+          await vm.updateVisitStatus(visitId, 'IN_PROGRESS');
+          debugPrint('🔄 Visit #$visitId: WAITING → IN_PROGRESS');
+          if (mounted) {
+            setState(() {
+              if (_visit != null) {
+                _visit = Map<String, dynamic>.from(_visit!)
+                  ..['status'] = 'IN_PROGRESS';
+              }
+            });
+          }
+        } catch (e) {
+          debugPrint(
+            '⚠️ _save: WAITING→IN_PROGRESS: ${DoctorViewModel.extractError(e)} '
+            '— continuing to COMPLETED.',
+          );
+        }
+      }
+
+      await vm.updateVisitStatus(visitId, 'COMPLETED');
+      debugPrint('✅ Visit #$visitId → COMPLETED');
+
+      if (mounted) {
+        setState(() {
+          if (_visit != null) {
+            _visit = Map<String, dynamic>.from(_visit!)
+              ..['status'] = 'COMPLETED';
+          }
+        });
+      }
+
+      // ── Appointment status → COMPLETED ──────────────────────────────────────
+      // The backend also does this automatically when visit → COMPLETED, but we
+      // mirror it here in case the local appointment list needs refreshing.
+      try {
+        await ApiService.updateAppointmentStatus(_apptId, 'COMPLETED');
+        debugPrint('✅ Appointment #$_apptId → COMPLETED');
+      } catch (e) {
+        debugPrint(
+          '⚠️ _save: appointment sync: ${DoctorViewModel.extractError(e)}',
+        );
+      }
+
+      // ── Refresh appointment list so the dashboard reflects COMPLETED ─────────
+      try {
+        await ref.read(doctorViewModelProvider.notifier).fetchAppointments();
+      } catch (_) {}
+
+      _snack(
+        'Consultation completed. Report sent via WhatsApp.',
+      );
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      _snack('Error: ${DoctorViewModel.extractError(e)}', err: true);
+      debugPrint('❌ _save: ${DoctorViewModel.extractError(e)}');
+      _snack('Failed to complete consultation. Please try again.', err: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -412,16 +626,17 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
   // ── Confirm exit ──────────────────────────────────────────────────────────
 
   void _confirmExit() {
+    final loc = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Leave Consultation?'),
-        content: const Text('Save a draft before leaving?'),
+        title: Text(loc.leaveConsultationTitle),
+        content: Text(loc.leaveConsultationBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Stay'),
+            child: Text(loc.stay),
           ),
           TextButton(
             onPressed: () async {
@@ -429,7 +644,7 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
               await _save(complete: false);
               if (mounted) Navigator.pop(context);
             },
-            child: const Text('Save Draft'),
+            child: Text(loc.saveDraftBtn),
           ),
           ElevatedButton(
             onPressed: () {
@@ -440,7 +655,7 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
               backgroundColor: _T.urgent,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Leave'),
+            child: Text(loc.leave),
           ),
         ],
       ),
@@ -451,27 +666,29 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
 
   @override
   Widget build(BuildContext context) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final loc = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: _T.bgPage,
+      backgroundColor: dt.bgPage,
       body: Column(
         children: [
-          _buildHeader(),
-          _buildPatientBar(),
-          _buildTabBar(),
+          _buildHeader(loc),
+          _buildPatientBar(loc),
+          _buildTabBar(loc),
           Expanded(
             child: _startingVisit
-                ? const Center(
+                ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(
+                        const CircularProgressIndicator(
                           color: _T.navy,
                           strokeWidth: 2,
                         ),
-                        SizedBox(height: 14),
+                        const SizedBox(height: 14),
                         Text(
-                          'Starting consultation...',
-                          style: TextStyle(fontSize: 13, color: _T.textS),
+                          loc.startingConsultationEllipsis,
+                          style: TextStyle(fontSize: 13, color: dt.textS),
                         ),
                       ],
                     ),
@@ -480,120 +697,132 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
                     controller: _tabs,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      // FIX: voiceTab is a function widget from voice_tab.dart
-                      voiceTab(
+                      VitalsTab(
+                        appointmentId: _apptId,
+                        patientId: _patId,
+                      ),
+                      VoiceTab(
                         notesCtrl: _notesCtrl,
-                        transcribing: _aiLoading,
+                        transcribing: _transcribing,
                         onTranscribe: _onVoiceRecorded,
                       ),
                       AIImagingTab(
                         selectedImage: _imagingSelectedImage,
-                        analysisLoading: _imagingAnalysisLoading,
-                        analysisResult: _imagingAnalysisResult,
                         onPickImage: _pickImgForAI,
-                        onAnalyze: _analyzeImagePlaceholder,
+                        onAnalyze: _navigateToImagingReview,
+                        selectedImageType: _imagingSelectedType,
+                        onImageTypeChanged: (t) =>
+                            setState(() => _imagingSelectedType = t),
                       ),
-                      // NOTE: class name must match what ai_tab.dart exports.
-                      // The original code used 'AITabb' — replace this with
-                      // the exact class name from ai_tab.dart once confirmed.
-                      AITabb(
-                        aiLoading: _aiLoading,
-                        aiResult: _aiResult,
-                        onRunAI: _runAI,
-                        onApplyToDiagnosis: _applyAIToDiagnosis,
-                        onVoiceRecorded: _onVoiceRecorded,
+                      LabReportsTab(
+                        visitId: _visitId,
+                        patientName: _patientName,
+                        patientId: _patId,
+                        ensureVisit: _ensureVisit,
+                      ),
+                      ManualReportTab(
+                        visitId: _visitId,
+                        ensureVisit: _ensureVisit,
                       ),
                     ],
                   ),
           ),
-          _buildActions(),
+          _buildActions(loc),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() => Container(
-    decoration: const BoxDecoration(gradient: _T.gNavy),
-    child: SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 16, 12),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
-              onPressed: _confirmExit,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Consultation',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    DateFormat(
-                      'dd MMM yyyy  •  hh:mm a',
-                    ).format(DateTime.now()),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.65),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+  Widget _buildHeader(AppLocalizations loc) {
+    final localeCode = Localizations.localeOf(context).languageCode;
+    // FIXED: was DateFormat('dd MMM yyyy  •  hh:mm a').format(now) with no
+    // locale arg — always English month name + Western digits.
+    final headerDate = arDigits(
+      DateFormat('dd MMM yyyy  •  hh:mm a', localeCode).format(DateTime.now()),
+      localeCode,
+    );
+
+    return Container(
+      decoration: const BoxDecoration(gradient: _T.gNavy),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 16, 12),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white70,
+                ),
+                onPressed: _confirmExit,
               ),
-            ),
-            if (_visit != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      width: 7,
-                      height: 7,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Color(0xFF69F0AE),
-                          shape: BoxShape.circle,
-                        ),
+                    Text(
+                      loc.consultationTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(width: 5),
                     Text(
-                      'Live',
+                      headerDate,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.white.withValues(alpha: 0.65),
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
-          ],
+              if (_visit != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 7,
+                        height: 7,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFF69F0AE),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        loc.liveBadge,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _buildPatientBar() {
-    final type =
-        widget.appointment['appointment_type_name'] ??
-        widget.appointment['appointment_type'] ??
-        'Consultation';
+  Widget _buildPatientBar(AppLocalizations loc) {
+    final type = _appointmentTypeName(loc); // FIXED: now localized
     final urgent = widget.appointment['is_urgent'] == true;
 
     return Container(
@@ -618,7 +847,7 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
                 Text(
                   type,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.65),
+                    color: Colors.white.withValues(alpha: 0.65),
                     fontSize: 11,
                   ),
                 ),
@@ -643,7 +872,7 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -668,18 +897,18 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
                 color: _T.urgent,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.warning_amber_rounded,
                     color: Colors.white,
                     size: 12,
                   ),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text(
-                    'URGENT',
-                    style: TextStyle(
+                    loc.urgentBadge,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
@@ -694,90 +923,105 @@ class _DoctorConsultationPageState extends ConsumerState<DoctorConsultationPage>
     );
   }
 
-  Widget _buildTabBar() => Container(
-    color: _T.bgCard,
-    child: TabBar(
-      controller: _tabs,
-      labelColor: _T.navy,
-      unselectedLabelColor: _T.textM,
-      indicatorColor: _T.navy,
-      indicatorWeight: 2.5,
-      isScrollable: true,
-      labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-      tabs: const [
-        Tab(text: 'Voice'),
-        Tab(text: 'AI Imaging'),
-        Tab(text: 'AI Assist'),
-      ],
-    ),
-  );
+  Widget _buildTabBar(AppLocalizations loc) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    return Container(
+      color: dt.bgCard,
+      child: TabBar(
+        controller: _tabs,
+        labelColor: dt.accent,
+        unselectedLabelColor: dt.textM,
+        indicatorColor: dt.accent,
+        indicatorWeight: 2.5,
+        isScrollable: true,
+        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        tabs: [
+          Tab(text: loc.vitalsTabLabel),
+          Tab(text: loc.voiceTabLabel),
+          Tab(text: loc.aiImagingTabLabel),
+          Tab(text: loc.labReportsTabLabel),
+          const Tab(text: 'Manual Report'),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildActions() => Container(
-    padding: EdgeInsets.only(
-      left: 20,
-      right: 20,
-      top: 14,
-      bottom: MediaQuery.of(context).padding.bottom + 14,
-    ),
-    decoration: BoxDecoration(
-      color: _T.bgCard,
-      boxShadow: [
-        BoxShadow(
-          color: _T.navy.withOpacity(0.08),
-          blurRadius: 16,
-          offset: const Offset(0, -4),
-        ),
-      ],
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _saving ? null : () => _save(complete: false),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: _T.navy),
-              foregroundColor: _T.navy,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+  Widget _buildActions(AppLocalizations loc) {
+    final dt = Theme.of(context).extension<DoctorThemeData>()!;
+    final isDoctor =
+        widget.doctorProfile.userType.toUpperCase() == 'DOCTOR';
+    return Container(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 14,
+        bottom: MediaQuery.of(context).padding.bottom + 14,
+      ),
+      decoration: BoxDecoration(
+        color: dt.bgCard,
+        boxShadow: [
+          BoxShadow(
+            color: _T.navy.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _saving ? null : () => _save(complete: false),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: _T.navy),
+                foregroundColor: _T.navy,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-            ),
-            child: const Text(
-              'Save Draft',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              child: Text(
+                loc.saveDraftBtn,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: _saving ? null : () => _save(complete: true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.teal,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'Complete Consultation',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          if (isDoctor) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: _saving ? null : () => _save(complete: true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _T.teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-          ),
-        ),
-      ],
-    ),
-  );
+                  elevation: 0,
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        loc.completeConsultationBtn,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

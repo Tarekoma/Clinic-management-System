@@ -1,3 +1,7 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// lib/services/AI_Service.dart
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,122 +10,99 @@ import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AIService {
-  // ✅ Production Endpoint
-  static const String baseUrl =
-      "https://ai-api.hakim-app.cloud/transcribe-report";
+  static const String _transcribeUrl =
+      'https://ai-api.hakim-app.cloud/transcribe-report';
 
-  // ✅ Image Analysis Endpoint
-  static const String imageAnalysisUrl =
-      "https://ai-api.hakim-app.cloud/analyze-medical-image";
+  static const String _imagingUrl =
+      'https://ai-api.hakim-app.cloud/analyze-medical-image';
 
-  // ✅ Backend API Key
-  static const String apiKey = "hakim-backend-key1-2026";
+  static const String _apiKey =
+      '66ba4126aa3b9f227adde3d1e8e143ad0076ad0fdaf861501051eabec00ccc0b';
 
-  /// Upload audio file → Receive structured medical report JSON
+  static Map<String, String> get _headers => {
+    'X-API-KEY': _apiKey,
+    'Authorization': 'Bearer $_apiKey',
+  };
+
+  // ── Transcribe audio report ──────────────────────────────────────────────
+
   static Future<Map<String, dynamic>> transcribeReport(File audioFile) async {
     try {
-      // ✅ Build Request
-      var request = http.MultipartRequest("POST", Uri.parse(baseUrl));
+      final request = http.MultipartRequest('POST', Uri.parse(_transcribeUrl))
+        ..headers.addAll(_headers)
+        ..files.add(await http.MultipartFile.fromPath('file', audioFile.path));
 
-      // ✅ Add API Key Header
-      request.headers["X-API-KEY"] = apiKey;
+      final streamed = await request.send();
+      final body = await streamed.stream.bytesToString();
 
-      // ✅ Attach Audio File
-      request.files.add(
-        await http.MultipartFile.fromPath("file", audioFile.path),
-      );
-
-      // ✅ Send Request
-      final streamedResponse = await request.send();
-
-      // ✅ Read Full Response Body
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      // Debug log (optional)
-      print("STATUS CODE: ${streamedResponse.statusCode}");
-      print("RESPONSE BODY: $responseBody");
-
-      // ✅ Handle Errors
-      if (streamedResponse.statusCode != 200) {
-        throw Exception(
-          "API Error: ${streamedResponse.statusCode}\n$responseBody",
-        );
+      if (streamed.statusCode != 200) {
+        throw Exception('API Error ${streamed.statusCode}: $body');
       }
 
-      // ✅ Parse JSON Response
-      final decoded = jsonDecode(responseBody);
-
-      return decoded;
+      return Map<String, dynamic>.from(jsonDecode(body) as Map);
     } catch (e) {
-      throw Exception("Transcribe Report Failed: $e");
+      throw Exception('Transcribe report failed: $e');
     }
   }
 
-  /// Pick image from gallery or camera
+  // ── Pick image from camera / gallery ────────────────────────────────────
+
   static Future<File?> pickImage({required ImageSource source}) async {
-    final ImagePicker picker = ImagePicker();
     try {
-      final XFile? image = await picker.pickImage(
+      final picked = await ImagePicker().pickImage(
         source: source,
         maxWidth: 1920,
         maxHeight: 1920,
         imageQuality: 85,
       );
-      if (image == null) return null;
-      return File(image.path);
+      return picked == null ? null : File(picked.path);
     } catch (e) {
-      print('Error picking image: $e');
+      print('pickImage error: $e');
       return null;
     }
   }
 
-  /// Upload image file → Receive AI medical analysis JSON
+  // ── Analyse a medical image ──────────────────────────────────────────────
+  //
+  // FIX: Previously this method manually filtered the AI response down to
+  // only 5 keys (findings, severity, confidence, recommendations,
+  // detected_conditions), silently discarding imageType, region, quality,
+  // impressions, and differentials — the exact fields the consultation page
+  // needs to build the structured display.
+  //
+  // Now the method returns the COMPLETE raw AI response so callers have full
+  // access to every field.  The only addition is a top-level 'error' key
+  // (null on success, error string on failure) so callers can do a single
+  // null-check instead of catching exceptions.
+
   static Future<Map<String, dynamic>> scanMedicalImage(File imageFile) async {
     try {
       if (!await imageFile.exists()) {
-        throw Exception("Image file does not exist");
+        return {'error': 'Image file does not exist at ${imageFile.path}'};
       }
 
-      var request = http.MultipartRequest("POST", Uri.parse(imageAnalysisUrl));
-      request.headers["X-API-KEY"] = apiKey;
+      final request = http.MultipartRequest('POST', Uri.parse(_imagingUrl))
+        ..headers.addAll(_headers)
+        ..files.add(
+          await http.MultipartFile.fromPath(
+            'image',
+            imageFile.path,
+            contentType: MediaType('image', 'jpeg'),
+          ),
+        );
 
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          "image",
-          imageFile.path,
-          contentType: MediaType('image', 'jpeg'),
-        ),
-      );
+      final streamed = await request.send();
+      final body = await streamed.stream.bytesToString();
 
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      if (streamedResponse.statusCode != 200) {
-        return {
-          'error': 'API Error: ${streamedResponse.statusCode}',
-          'findings': null,
-          'severity': null,
-          'confidence': null,
-        };
+      if (streamed.statusCode != 200) {
+        return {'error': 'API Error ${streamed.statusCode}: $body'};
       }
 
-      final decoded = jsonDecode(responseBody);
-      return {
-        'findings': decoded['findings'] ?? 'No findings',
-        'severity': decoded['severity'] ?? 'Unknown',
-        'confidence': decoded['confidence'] ?? 0.0,
-        'recommendations': decoded['recommendations'] ?? [],
-        'detected_conditions': decoded['detected_conditions'] ?? [],
-        'error': null,
-      };
+      // ── Return the full response, just annotate success with error = null ──
+      final decoded = Map<String, dynamic>.from(jsonDecode(body) as Map);
+      return {...decoded, 'error': null};
     } catch (e) {
-      print("Image analysis failed: $e");
-      return {
-        'error': e.toString(),
-        'findings': null,
-        'severity': null,
-        'confidence': null,
-      };
+      return {'error': e.toString()};
     }
   }
 }

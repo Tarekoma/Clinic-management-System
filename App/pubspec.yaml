@@ -1,0 +1,55 @@
+name: Hakeem
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── Localization ────────────────────────────────────────────────────────
+  flutter_localizations:
+    sdk: flutter
+
+  record: ^6.2.0
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  audioplayers: ^6.1.0
+  http: ^1.2.0
+  image_picker: ^1.0.7
+  dio: ^5.4.0
+  flutter_secure_storage: ^9.0.0
+  intl: ^0.20.2
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.5.1
+  shared_preferences: ^2.2.2
+  share_plus: 12.0.2
+  fl_chart: ^0.68.0
+  file_picker: ^8.1.2
+  open_filex: ^4.7.0
+
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.1
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/icon/app_icon5.png
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+  generate: true   # ← enables `flutter gen-l10n` to read l10n.yaml + lib/l10n/*.arb
+  assets:
+    - assets/icon/app_icon5.png
+    - assets/icon/app_icon6.png
+    - assets/icon/app_icon7.jpeg
+    - assets/icon/app_icon8.jpeg

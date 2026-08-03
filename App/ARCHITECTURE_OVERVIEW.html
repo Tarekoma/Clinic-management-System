@@ -1,0 +1,709 @@
+<title>Hakim — Architecture &amp; Codebase Overview</title>
+<style>
+  @charset "UTF-8";
+  :root{
+    --ink:#0D1B2A; --ink-soft:#3B4A5A; --paper:#F5F7FA; --card:#FFFFFF;
+    --line:#DDE3EA; --line-soft:#E8ECF1;
+    --navy:#0B3D6B; --navy-deep:#071E34; --teal:#00796B;
+    --asst:#00695C; --asst-deep:#004D40;
+    --admin:#3949AB; --admin-deep:#1A237E;
+    --urgent:#B3261E; --urgent-bg:#FBEAE9;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    --serif: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, "Noto Serif", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 10px;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#E8EDF3; --ink-soft:#A9B8C9; --paper:#0D1117; --card:#161C27;
+      --line:#2A3444; --line-soft:#212938;
+      --navy:#5B9FDE; --teal:#4DB6AC;
+      --asst:#4DB6AC; --admin:#8C9EFF;
+      --urgent:#FF8A80; --urgent-bg:#3A1F1E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#E8EDF3; --ink-soft:#A9B8C9; --paper:#0D1117; --card:#161C27;
+    --line:#2A3444; --line-soft:#212938;
+    --navy:#5B9FDE; --teal:#4DB6AC;
+    --asst:#4DB6AC; --admin:#8C9EFF;
+    --urgent:#FF8A80; --urgent-bg:#3A1F1E;
+  }
+  :root[data-theme="light"]{
+    --ink:#0D1B2A; --ink-soft:#3B4A5A; --paper:#F5F7FA; --card:#FFFFFF;
+    --line:#DDE3EA; --line-soft:#E8ECF1;
+    --navy:#0B3D6B; --teal:#00796B; --asst:#00695C; --admin:#3949AB;
+    --urgent:#B3261E; --urgent-bg:#FBEAE9;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper); color:var(--ink); font-family:var(--sans);
+    font-size:15.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background: color-mix(in srgb, var(--navy) 30%, transparent); }
+
+  a{ color:var(--navy); text-decoration-thickness:1px; }
+  code, .path{ font-family:var(--mono); font-size:0.86em; }
+  code{
+    background:var(--line-soft); padding:.12em .42em; border-radius:5px;
+    border:1px solid var(--line);
+  }
+  pre{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; overflow-x:auto; font-family:var(--mono); font-size:.83em; line-height:1.6;
+  }
+  pre code{ background:none; border:none; padding:0; }
+
+  h1,h2,h3,h4{ font-family:var(--serif); font-weight:600; text-wrap:balance; color:var(--ink); }
+  h1{ font-size:2.15rem; letter-spacing:-0.01em; margin:0 0 6px; }
+  h2{ font-size:1.5rem; margin:0 0 4px; border-bottom:1px solid var(--line); padding-bottom:10px; }
+  h3{ font-size:1.12rem; margin:2em 0 .6em; color:var(--ink); }
+  h4{ font-size:.98rem; margin:1.4em 0 .4em; }
+  p{ margin:0 0 1em; max-width:76ch; }
+  .lede{ font-size:1.05rem; color:var(--ink-soft); max-width:70ch; font-style:italic; }
+
+  /* ── Layout: sidebar + content ─────────────────────────────── */
+  .shell{ display:flex; min-height:100vh; }
+  nav.toc{
+    width:270px; flex:0 0 270px; padding:28px 20px 40px; position:sticky; top:0; height:100vh;
+    overflow-y:auto; border-right:1px solid var(--line); background:var(--card);
+  }
+  nav.toc .brand{ display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+  nav.toc .brand .mark{
+    width:30px; height:30px; border-radius:8px;
+    background:linear-gradient(135deg, var(--navy), var(--teal));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--serif); font-weight:700; font-size:15px;
+  }
+  nav.toc .brand b{ font-family:var(--serif); font-size:1.05rem; }
+  nav.toc .brand span{ display:block; font-size:.68rem; color:var(--ink-soft); letter-spacing:.04em; }
+  nav.toc ol{ list-style:none; margin:0; padding:0; counter-reset:sec; }
+  nav.toc li{ counter-increment:sec; margin:0; }
+  nav.toc a{
+    display:flex; gap:8px; padding:6px 8px; border-radius:7px; color:var(--ink-soft);
+    font-size:.83rem; text-decoration:none; line-height:1.35;
+  }
+  nav.toc a:hover{ background:var(--line-soft); color:var(--ink); }
+  nav.toc a::before{
+    content: counter(sec); font-variant-numeric: tabular-nums; color:var(--navy); font-weight:700;
+    font-size:.72rem; width:16px; flex:0 0 auto; padding-top:1px;
+  }
+  main{ flex:1; min-width:0; padding:44px clamp(20px,4vw,64px) 100px; max-width:980px; }
+  header.hero{ margin-bottom:34px; }
+  .tags{ display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 0; }
+
+  section{ margin-bottom:56px; scroll-margin-top:24px; }
+
+  /* ── Role badges (semantic, used throughout) ─────────────── */
+  .role{
+    display:inline-flex; align-items:center; gap:5px; font-size:.7rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em; padding:3px 8px; border-radius:99px;
+    white-space:nowrap; border:1px solid transparent;
+  }
+  .role.doctor{ color:var(--navy); background:color-mix(in srgb, var(--navy) 12%, transparent); border-color:color-mix(in srgb, var(--navy) 30%, transparent); }
+  .role.assistant{ color:var(--asst); background:color-mix(in srgb, var(--asst) 14%, transparent); border-color:color-mix(in srgb, var(--asst) 30%, transparent); }
+  .role.admin{ color:var(--admin); background:color-mix(in srgb, var(--admin) 14%, transparent); border-color:color-mix(in srgb, var(--admin) 30%, transparent); }
+  .role.core{ color:var(--ink-soft); background:var(--line-soft); border-color:var(--line); }
+
+  /* ── Tables ───────────────────────────────────────────────── */
+  .twrap{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--card); }
+  table{ border-collapse:collapse; width:100%; font-size:.86rem; }
+  th,td{ text-align:left; padding:9px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  thead th{
+    background:var(--line-soft); font-family:var(--sans); font-size:.68rem; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--ink-soft); position:sticky; top:0;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:color-mix(in srgb, var(--navy) 4%, transparent); }
+  td .path{ color:var(--ink-soft); }
+
+  /* ── Callouts ─────────────────────────────────────────────── */
+  .note{
+    border:1px solid var(--line); background:var(--card); border-left:3px solid var(--navy);
+    border-radius:0 var(--radius) var(--radius) 0; padding:12px 16px; margin:16px 0; font-size:.9rem;
+  }
+  .warn{ border-left-color:var(--urgent); }
+  .warn b{ color:var(--urgent); }
+
+  /* ── Folder tree ──────────────────────────────────────────── */
+  .tree{
+    font-family:var(--mono); font-size:.82rem; background:var(--card); border:1px solid var(--line);
+    border-radius:var(--radius); padding:16px 20px; overflow-x:auto; white-space:pre; line-height:1.75;
+  }
+
+  /* ── Diagram building blocks (hand-built, no external JS) ─── */
+  .diagram{ border:1px solid var(--line); background:var(--card); border-radius:var(--radius); padding:22px; overflow-x:auto; }
+  .diagram h4{ margin-top:0; }
+
+  .stack{ display:flex; flex-direction:column; gap:0; align-items:stretch; min-width:460px; }
+  .stack .layer{
+    border:1.5px solid var(--line); border-radius:8px; padding:12px 16px; margin:0; background:var(--paper);
+    font-size:.85rem;
+  }
+  .stack .layer b{ display:block; font-family:var(--serif); font-size:.95rem; margin-bottom:2px; }
+  .stack .arrow{ align-self:center; color:var(--ink-soft); font-size:1rem; padding:2px 0; }
+  .stack .layer.navy{ border-color:var(--navy); }
+  .stack .layer.teal{ border-color:var(--teal); }
+  .stack .layer.admin{ border-color:var(--admin); }
+
+  .flow{ display:flex; align-items:stretch; gap:0; min-width:640px; flex-wrap:nowrap; }
+  .flow .node{
+    border:1.5px solid var(--line); border-radius:8px; padding:10px 14px; background:var(--paper);
+    font-size:.82rem; display:flex; flex-direction:column; justify-content:center; min-width:120px; text-align:center;
+  }
+  .flow .conn{ display:flex; align-items:center; justify-content:center; min-width:34px; color:var(--ink-soft); font-size:1.1rem; }
+
+  .seq{ list-style:none; margin:0; padding:0; counter-reset:step; min-width:420px; }
+  .seq li{
+    counter-increment:step; position:relative; padding:0 0 22px 34px; border-left:2px solid var(--line); margin-left:14px;
+  }
+  .seq li:last-child{ border-left-color:transparent; padding-bottom:0; }
+  .seq li::before{
+    content:counter(step); position:absolute; left:-15px; top:-2px; width:28px; height:28px; border-radius:50%;
+    background:var(--navy); color:#fff; font-size:.78rem; font-weight:700; display:flex; align-items:center;
+    justify-content:center; font-variant-numeric:tabular-nums;
+  }
+  .seq b{ display:block; font-size:.88rem; margin-bottom:2px; }
+  .seq span{ font-size:.82rem; color:var(--ink-soft); }
+
+  .cards3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; min-width:560px; }
+  .rolecard{ border-radius:10px; padding:14px 16px; border:1.5px solid var(--line); background:var(--paper); }
+  .rolecard.doctor{ border-color:var(--navy); }
+  .rolecard.assistant{ border-color:var(--asst); }
+  .rolecard.admin{ border-color:var(--admin); }
+  .rolecard h5{ margin:0 0 6px; font-family:var(--serif); font-size:1rem; }
+  .rolecard ul{ margin:0; padding-left:18px; font-size:.8rem; color:var(--ink-soft); }
+
+  footer.foot{ margin-top:70px; padding-top:20px; border-top:1px solid var(--line); font-size:.8rem; color:var(--ink-soft); }
+
+  @media (max-width: 880px){
+    .shell{ display:block; }
+    nav.toc{ position:relative; height:auto; width:auto; border-right:none; border-bottom:1px solid var(--line); }
+    main{ padding:28px 18px 80px; }
+    .cards3{ grid-template-columns:1fr; min-width:0; }
+  }
+
+  /* ── Print / PDF export ───────────────────────────────────────────
+     The on-screen layout relies on a sticky 100vh sidebar and
+     horizontally-scrolling wide content — both break on a paginated
+     medium. This block turns the same document into a linear,
+     single-column PDF instead of exporting the screen chrome as-is. */
+  @media print{
+    :root{
+      --ink:#0D1B2A; --ink-soft:#3B4A5A; --paper:#FFFFFF; --card:#FFFFFF;
+      --line:#D7DEE6; --line-soft:#EEF1F5;
+      --navy:#0B3D6B; --teal:#00796B; --asst:#00695C; --admin:#3949AB;
+      --urgent:#B3261E; --urgent-bg:#FBEAE9;
+    }
+    html,body{ background:#fff; font-size:11.5px; }
+    .shell{ display:block; }
+    nav.toc{
+      position:static; height:auto; width:auto; overflow:visible; border-right:none;
+      border-bottom:2px solid var(--navy); margin-bottom:22px; padding:0 0 14px;
+      break-after:page;
+    }
+    nav.toc ol{ columns:2; column-gap:28px; }
+    nav.toc li{ break-inside:avoid; }
+    main{ padding:0; max-width:none; }
+    section{ break-inside:avoid-page; margin-bottom:34px; }
+    h2{ break-before:page; }
+    section:first-of-type h2{ break-before:avoid; }
+    .diagram, .tree, .twrap, .note{ break-inside:avoid; }
+    .twrap, .diagram, .tree{ overflow-x:visible; }
+    .flow, .stack, .seq, .cards3{ min-width:0 !important; }
+    .flow{ flex-wrap:wrap; }
+    table{ font-size:.78rem; }
+    a{ color:var(--navy); }
+    a[href^="#"]::after{ content:""; }
+    thead th{ position:static; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="toc">
+    <div class="brand">
+      <div class="mark">H</div>
+      <div><b>Hakim</b><span>Architecture overview</span></div>
+    </div>
+    <ol>
+      <li><a href="#s1">Project overview</a></li>
+      <li><a href="#s2">Folder structure</a></li>
+      <li><a href="#s3">File map</a></li>
+      <li><a href="#s4">Entry point</a></li>
+      <li><a href="#s5">Feature breakdown</a></li>
+      <li><a href="#s6">Data flow</a></li>
+      <li><a href="#s7">State management</a></li>
+      <li><a href="#s8">API layer</a></li>
+      <li><a href="#s9">Models</a></li>
+      <li><a href="#s10">Navigation</a></li>
+      <li><a href="#s11">Dependency graph</a></li>
+      <li><a href="#s12">Learning order</a></li>
+      <li><a href="#s13">Top 30 files</a></li>
+      <li><a href="#s14">Diagrams</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <h1>Hakim — Architecture &amp; Codebase Overview</h1>
+      <p class="lede">A from-scratch technical map of the Flutter client, built by reading the actual source tree — ~50,800 lines across 90 files. Nothing here is inferred from naming conventions alone; where the codebase doesn't answer a question, that's stated rather than guessed.</p>
+      <div class="tags">
+        <span class="role doctor">Doctor</span>
+        <span class="role assistant">Assistant</span>
+        <span class="role admin">Admin</span>
+        <span class="role core">Core / shared</span>
+      </div>
+    </header>
+
+    <!-- ══════════════════════════ 1 ══════════════════════════ -->
+    <section id="s1">
+      <h2>1 · High-Level Project Overview</h2>
+      <p><b>Hakim</b> ("physician" in Arabic) is a bilingual (English/Arabic, full RTL) clinic-management mobile app for small private practices. It is a client for a FastAPI-style REST backend (<code>backend.hakim-app.cloud</code>) plus a second, separate AI microservice (<code>ai-api.hakim-app.cloud</code>) referenced in config but — as far as this codebase shows — not called directly; voice transcription and imaging analysis go through the main backend, which presumably proxies to the AI service server-side.</p>
+
+      <h3>Main features</h3>
+      <p>Patient registry · appointment scheduling with types/statuses · a 6-tab <b>Consultation</b> workflow per visit (Vitals → Patient History → Voice-to-report AI → AI Medical Imaging → Lab Reports → Manual Report) · AI-assisted reporting (voice→transcript→structured report; image→AI draft→doctor review) · report <b>finalization</b> (draft → reviewed → finalized, triggering server-side PDF + WhatsApp delivery) · lab-report PDF upload/viewing · finance/revenue dashboard · admin console (stats, user activation, audit log) · settings (fees, linked assistants, CSV export, language, dark mode) · self-service registration gated behind admin activation.</p>
+
+      <h3>User roles</h3>
+      <div class="cards3">
+        <div class="rolecard doctor">
+          <h5>Doctor</h5>
+          <ul><li>Owns a clinic</li><li>Full patient / appointment / consultation / finance access</li><li>Shell: Dashboard, Appointments, Patients, Finance</li></ul>
+        </div>
+        <div class="rolecard assistant">
+          <h5>Assistant</h5>
+          <ul><li>Linked to exactly one doctor (<code>doctor_id</code>)</li><li>Manages that doctor's front-desk workload</li><li>Shell: Dashboard, Appointments, Patients, Payments</li></ul>
+        </div>
+        <div class="rolecard admin">
+          <h5>Admin</h5>
+          <ul><li>Cross-clinic oversight</li><li>No clinical data entry</li><li>Shell: Dashboard, Users, Patients, Audit Logs</li></ul>
+        </div>
+      </div>
+
+      <h3>Overall architecture</h3>
+      <p>A pragmatic <b>two-layer MVVM</b> — not a full Clean-Architecture stack. There is <b>no repository layer, no use-case classes, and almost no domain entity classes.</b> <code>ApiService</code> methods return raw <code>Map&lt;String,dynamic&gt;</code>/<code>List&lt;dynamic&gt;</code> straight from Dio, and ViewModels store those same raw maps in state. The only real model classes are <code>UserProfile</code>, <code>AppError</code>, <code>RegistrationData</code>, and three small classes living inside <code>admin_viewmodel.dart</code> (<code>AdminStats</code>, <code>AdminUser</code>, <code>AuditLog</code>). Know this before hunting for a <code>Patient</code> or <code>Appointment</code> class — there isn't one; see §9.</p>
+      <p>State management is <b>Riverpod</b> (<code>StateNotifierProvider</code>), theming is <b>per-role</b> (three <code>ThemeExtension</code>s), navigation is <b>plain <code>Navigator.push</code>/<code>MaterialPageRoute</code></b> — no named-route table, no router package.</p>
+    </section>
+
+    <!-- ══════════════════════════ 2 ══════════════════════════ -->
+    <section id="s2">
+      <h2>2 · Folder Structure</h2>
+      <div class="tree">lib/
+├── main.dart               entry point + startup routing
+├── config/                 compile-time constants (base URLs, API key)
+├── errors/                 typed error model + classifier
+├── services/                two static "backend gateway" classes
+├── model/                  the one shared domain model (UserProfile)
+├── providers/              Riverpod provider wiring (thin, no logic)
+├── viewmodels/             StateNotifier business logic, one per role
+├── views/                  screens, grouped by role
+│   ├── auths/
+│   ├── doctor/
+│   │   ├── doctor_pages/
+│   │   ├── consultation/
+│   │   ├── lab_reports/
+│   │   └── settings/
+│   ├── assistant/
+│   └── admin/
+├── widgets/                reusable presentational components, by role
+│   ├── doctor/ · assistant/ · shared/
+├── utils/                  theming + small pure-function helpers
+├── splash/                  splash screen widget
+└── l10n/                    ARB source + flutter gen-l10n output</div>
+
+      <div class="twrap" style="margin-top:18px;">
+        <table>
+          <thead><tr><th>Folder</th><th>Why it exists</th><th>Contains</th><th>Talks to</th></tr></thead>
+          <tbody>
+            <tr><td><code>config/</code></td><td>One place to change environment (base URL, key) via <code>--dart-define</code></td><td><span class="path">app_config.dart</span></td><td><code>API_Service</code>, <code>auth_viewmodel</code></td></tr>
+            <tr><td><code>errors/</code></td><td>Centralizes "what does this exception mean to a human"</td><td><code>AppError</code>, <code>ErrorHandler</code></td><td>Every ViewModel</td></tr>
+            <tr><td><code>services/</code></td><td>Only code allowed to touch Dio / SharedPreferences / secure storage directly</td><td><span class="path">API_Service.dart</span>, <span class="path">settings_service.dart</span></td><td>ViewModels, providers</td></tr>
+            <tr><td><code>model/</code></td><td>The one cross-cutting object that survives login</td><td><span class="path">UserProfile.dart</span></td><td>Every role shell / profile screen</td></tr>
+            <tr><td><code>providers/</code></td><td>Wires each StateNotifier into Riverpod; deliberately logic-free</td><td>One file per ViewModel + theme/locale</td><td>Read via <code>ref.watch</code> everywhere</td></tr>
+            <tr><td><code>viewmodels/</code></td><td>All business/state logic lives here</td><td>5 ViewModels</td><td>Calls <code>ApiService</code>; feeds views</td></tr>
+            <tr><td><code>views/…/*_interface.dart</code></td><td>Per-role app shell: top bar, bottom nav, page switcher</td><td>—</td><td>Hosts role pages; reads role provider</td></tr>
+            <tr><td><code>views/doctor/consultation/</code></td><td>The 6 tabs shown inside one active visit</td><td>—</td><td><code>doctor_viewmodel</code>, <code>API_Service</code></td></tr>
+            <tr><td><code>widgets/doctor/</code>, <code>widgets/assistant/</code></td><td>Role-specific presentational components</td><td>Cards, forms, avatars, chips</td><td>Imported by matching role's views</td></tr>
+            <tr><td><code>widgets/shared/</code></td><td>The only two widgets used by more than one role</td><td><code>ErrorRetryWidget</code>, <code>AppDialogs</code></td><td>Imported ad hoc</td></tr>
+            <tr><td><code>utils/</code></td><td>Theming + small pure helpers</td><td>3 theme extensions, <code>app_themes</code>, digit/clinic helpers</td><td>Read via <code>Theme.of(context)</code></td></tr>
+            <tr><td><code>l10n/</code></td><td>Source strings + generated localization classes</td><td><span class="path">app_en.arb</span>, <span class="path">app_ar.arb</span>, generated Dart</td><td><code>AppLocalizations.of(context)</code> everywhere</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ 3 ══════════════════════════ -->
+    <section id="s3">
+      <h2>3 · File Map</h2>
+      <p>Grouped by responsibility. "Depends on" lists significant in-repo imports (framework imports omitted).</p>
+
+      <h3><span class="role core">Core</span> App shell, errors, services, model</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>File</th><th>Purpose</th><th>Depends on</th></tr></thead>
+        <tbody>
+          <tr><td><span class="path">main.dart</span></td><td>Entry point; inits ApiService, registers global 401 handler, resolves session on cold start, builds MaterialApp</td><td>API_Service, auth_viewmodel, settings_service, app_themes, all 3 Interfaces</td></tr>
+          <tr><td><span class="path">splash/splash_screen.dart</span></td><td>Branded splash shown while session resolves</td><td>—</td></tr>
+          <tr><td><span class="path">config/app_config.dart</span></td><td>Base URLs, API key, demo admin creds, page sizes — all <code>--dart-define</code> overridable</td><td>—</td></tr>
+          <tr><td><span class="path">errors/app_error.dart</span></td><td><code>AppErrorType</code> enum + <code>AppError</code> exception</td><td>—</td></tr>
+          <tr><td><span class="path">errors/error_handler.dart</span></td><td>Classifies any exception/DioException into a friendly <code>AppError</code></td><td>app_error.dart</td></tr>
+          <tr><td><span class="path">services/API_Service.dart</span></td><td>Entire backend surface — Dio client + interceptor + ~60 endpoint methods</td><td>app_config, error_handler</td></tr>
+          <tr><td><span class="path">services/settings_service.dart</span></td><td>Local device prefs: fees, language, dark mode, notifications, last-active-tab per role</td><td>—</td></tr>
+          <tr><td><span class="path">model/UserProfile.dart</span></td><td>Cross-cutting user identity + role + clinic fields + assistant→doctor linkage</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Providers <span class="role core">logic-free wiring</span></h3>
+      <div class="twrap"><table>
+        <thead><tr><th>File</th><th>Provider(s)</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><span class="path">auth_providers.dart</span></td><td><code>authProvider</code>, <code>authLogoutCleanupProvider</code></td><td>Cleanup provider invalidates the 3 role providers on logout</td></tr>
+          <tr><td><span class="path">doctor_providers.dart</span></td><td><code>doctorViewModelProvider</code></td><td>No <code>autoDispose</code> — keeps cached visit/report IDs across navigation</td></tr>
+          <tr><td><span class="path">assistant_providers.dart</span></td><td><code>assistantViewModelProvider</code></td><td>No <code>autoDispose</code> — keeps resolved linked-doctor ID</td></tr>
+          <tr><td><span class="path">admin_providers.dart</span></td><td><code>adminViewModelProvider</code></td><td>—</td></tr>
+          <tr><td><span class="path">settings_providers.dart</span></td><td><code>settingsViewModelProvider</code></td><td>—</td></tr>
+          <tr><td><span class="path">theme_providers.dart</span></td><td><code>themeModeProvider</code>, <code>scaffoldMessengerKey</code></td><td>Key lets snackbars render above modal sheets</td></tr>
+          <tr><td><span class="path">locale_provider.dart</span></td><td><code>localeProvider</code></td><td>Restores saved language on construction</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>ViewModels</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>File</th><th>State</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><span class="role core">core</span> <span class="path">auth_viewmodel.dart</span></td><td><code>AuthState</code></td><td>Login (JWT decode, role resolution, discovery fallback), self-registration (raw <code>http</code>, not Dio), logout</td></tr>
+          <tr><td><span class="role doctor">doctor</span> <span class="path">doctor_viewmodel.dart</span> <small>1,626 ln</small></td><td><code>DoctorState</code></td><td>Patients/appointments/vitals CRUD+pagination, visit lifecycle, voice/report assembly, image upload, <b>finalization</b></td></tr>
+          <tr><td><span class="role assistant">assistant</span> <span class="path">assistant_viewmodel.dart</span> <small>1,065 ln</small></td><td><code>AssistantState</code></td><td>Mirrors DoctorViewModel, scoped to one linked doctor; doctor-resolution chain in <code>initForAssistant()</code></td></tr>
+          <tr><td><span class="role admin">admin</span> <span class="path">admin_viewmodel.dart</span></td><td><code>AdminState</code></td><td>Dashboard stats (+ client aggregation fallback), combined user list, audit log pagination</td></tr>
+          <tr><td><span class="role core">core</span> <span class="path">settings_viewmodel.dart</span></td><td><code>SettingsState</code></td><td>Prefs, password change, CSV export, fee-sync-to-backend with 409 recovery</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3><span class="role core">Auth</span> views</h3>
+      <div class="twrap"><table><tbody>
+        <tr><td><span class="path">views/auths/login_page.dart</span></td><td>Single login for all 3 roles; force-pins English/LTR regardless of app locale; routes via <code>AuthState.destination</code></td></tr>
+        <tr><td><span class="path">views/auths/registration_page.dart</span></td><td>Tabbed Doctor/Assistant self-registration; "pending approval" screen on success</td></tr>
+      </tbody></table></div>
+
+      <h3><span class="role doctor">Doctor</span> pages, consultation, lab reports, settings</h3>
+      <div class="twrap"><table><tbody>
+        <tr><td><span class="path">doctor_interface.dart</span></td><td>Shell: top bar, 4-tab bottom nav, page switcher, logout</td></tr>
+        <tr><td><span class="path">doctor_dashboard.dart</span></td><td>Overview cards, "up next", revenue-today, fl_chart trend</td></tr>
+        <tr><td><span class="path">doctor_appointments_page.dart</span></td><td>List/calendar, filters, launches consultation</td></tr>
+        <tr><td><span class="path">doctor_patients_page.dart</span></td><td>Patient search/list/create</td></tr>
+        <tr><td><span class="path">doctor_patient_detail.dart</span> <small>1,820 ln</small></td><td>Full record: info, conditions, appointments, reports, images, labs</td></tr>
+        <tr><td><span class="path">doctor_finance_page.dart</span></td><td>Revenue table/summary</td></tr>
+        <tr><td><span class="path">doctor_profile_page.dart</span> / <span class="path">doctor_edit_profile_page.dart</span></td><td>View/edit own profile</td></tr>
+        <tr><td><span class="path">doctor_consultation_page.dart</span> <small>1,095 ln</small></td><td><b>Consultation container.</b> Resolves/creates the visit, hosts 6-tab TabBarView, owns finalize-on-complete orchestration</td></tr>
+        <tr><td><span class="path">doctor_settings_page.dart</span> <small>1,761 ln</small></td><td>Settings entry sheet; hosts sub-sheets</td></tr>
+        <tr><td><span class="path">consultation/vitals_tab.dart</span></td><td>BP/pulse/temp/weight + condition tagging</td></tr>
+        <tr><td><span class="path">consultation/patient_history_tab.dart</span> <small>2,092 ln — largest view file</small></td><td>7 collapsible sections aggregating full patient history (allergies section has no backend yet)</td></tr>
+        <tr><td><span class="path">consultation/voice_tab.dart</span> + <span class="path">widgets/doctor/voice_recording_widget.dart</span></td><td>Record → upload → transcribe</td></tr>
+        <tr><td><span class="path">consultation/voice_report_review_page.dart</span></td><td>Editable AI-generated report draft</td></tr>
+        <tr><td><span class="path">consultation/ai_imaging_tab.dart</span> + <span class="path">ai_imaging_review_page.dart</span> <small>1,701 ln</small></td><td>Pick/capture → upload → AI draft (priority chain) → edit → staged until completion</td></tr>
+        <tr><td><span class="path">consultation/manual_report_tab.dart</span></td><td>Free-form report, no AI</td></tr>
+        <tr><td><span class="path">lab_reports/lab_reports_page.dart</span></td><td><code>LabReportsPage</code> (standalone) + <code>LabReportsTab</code> (embedded)</td></tr>
+        <tr><td><span class="path">lab_reports/lab_report_viewer_page.dart</span></td><td>Authenticated download then open locally via <code>open_filex</code></td></tr>
+        <tr><td><span class="path">settings/*.dart</span></td><td>appearance, change-password, default-fees, linked-assistants, export sheets</td></tr>
+      </tbody></table></div>
+
+      <h3><span class="role assistant">Assistant</span> views</h3>
+      <div class="twrap"><table><tbody>
+        <tr><td><span class="path">assistant_interface.dart</span></td><td>Shell; wraps subtree in Assistant Theme explicitly (dialogs re-wrap manually)</td></tr>
+        <tr><td><span class="path">assistant_dashboard.dart</span></td><td>Today's appointments, quick stats for linked doctor</td></tr>
+        <tr><td><span class="path">assistant_appointments_page.dart</span></td><td>Booking, check-in, payment toggle</td></tr>
+        <tr><td><span class="path">assistant_patients_page.dart</span></td><td>List/search/create — delegates detail to widgets/assistant</td></tr>
+        <tr><td><span class="path">assistant_vitals_page.dart</span></td><td>Pre-consultation vitals entry</td></tr>
+        <tr><td><span class="path">assistant_payments_page.dart</span></td><td>Paid/unpaid ledger</td></tr>
+        <tr><td><span class="path">assistant_settings_page.dart</span> <small>1,885 ln</small></td><td>Settings + linked-doctor info + export, all as private classes in one file</td></tr>
+        <tr><td class="warn"><span class="path">views/assistant/assistant_patient_detail.dart</span></td><td class="warn"><b>⚠ Dead file</b> — same lineage as <code>widgets/assistant/assistant_patient_detail.dart</code>, but nothing imports this copy. Safe to delete; out of scope here.</td></tr>
+      </tbody></table></div>
+
+      <h3><span class="role admin">Admin</span> views</h3>
+      <div class="twrap"><table><tbody>
+        <tr><td><span class="path">admin_interface.dart</span></td><td>Shell; indigo AdminTheme</td></tr>
+        <tr><td><span class="path">admin_dashboard.dart</span></td><td>6-card stats grid, skeletons, retry-on-error</td></tr>
+        <tr><td><span class="path">admin_users_page.dart</span></td><td>Tabbed doctor/assistant/admin list, search, filters, activate/deactivate</td></tr>
+        <tr><td><span class="path">admin_patients_page.dart</span></td><td>Read/moderate patients system-wide</td></tr>
+        <tr><td><span class="path">admin_audit_logs_page.dart</span> <small>975 ln</small></td><td>Paginated, filterable audit trail</td></tr>
+        <tr><td><span class="path">admin_settings_page.dart</span> <small>1,116 ln</small></td><td>Profile (read-only), password, appearance, sign out — no fee/assistant sections</td></tr>
+      </tbody></table></div>
+
+      <h3>Widgets &amp; Utils</h3>
+      <div class="twrap"><table><tbody>
+        <tr><td><span class="role doctor">doctor</span> widgets</td><td><code>doctor_shared_widgets</code>, <code>doctor_pat_card</code>, <code>doctor_appt_card</code>, <code>doctor_appt_form</code>, <code>doctor_pat_form</code>, <code>doctor_appt_details_sheet</code>, <code>doctor_consultation_widgets</code>, <code>image_upload_widget</code>, <code>ai_analysis_result_widget</code>, <code>voice_recording_widget</code></td></tr>
+        <tr><td><span class="role assistant">assistant</span> widgets</td><td><code>assistant_shared_widgets</code>, <code>assistant_pat_card</code>, <code>assistant_appt_card</code>, <code>assistant_pat_form</code>, <code>assistant_appt_form</code>, <code>assistant_patient_detail</code></td></tr>
+        <tr><td><span class="role core">shared</span> widgets</td><td><code>error_retry_widget</code>, <code>app_dialogs</code> — only two widgets used by more than one role</td></tr>
+        <tr><td>utils</td><td><code>doctor_theme</code> / <code>assistant_theme</code> / <code>admin_theme</code> (ThemeExtension + brand tokens), <code>app_themes.dart</code> <small>1,293 ln</small> (assembles both global ThemeDatas), <code>arabic_digits.dart</code>, <code>clinic_helpers.dart</code></td></tr>
+        <tr><td>l10n</td><td><code>app_en.arb</code> / <code>app_ar.arb</code> source strings + generated Dart (do not hand-edit)</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- ══════════════════════════ 4 ══════════════════════════ -->
+    <section id="s4">
+      <h2>4 · Entry Point</h2>
+      <p><span class="path">main.dart</span> → <code>main()</code>:</p>
+      <div class="diagram"><ol class="seq">
+        <li><b>ApiService.init()</b><span>Constructs the single Dio instance — base URL, timeouts, the X-API-KEY + Bearer request interceptor, response/error logging, global 401 handling.</span></li>
+        <li><b>registerUnauthorizedHandler(...)</b><span>Wires a callback that resets AuthViewModel's static instance and force-navigates to LoginPage on any 401, anywhere.</span></li>
+        <li><b>runApp(ProviderScope(child: MyApp()))</b><span>MyApp watches themeModeProvider + localeProvider; home is <code>_StartupRouter</code>.</span></li>
+        <li><b>_StartupRouter shows SplashScreen</b><span>Then calls <code>_resolveInitialScreen()</code> in initState.</span></li>
+        <li><b>Read token / role / profile</b><span>From secure storage. Missing or JWT <code>exp</code> already passed (decoded client-side, no crypto lib) → LoginPage.</span></li>
+        <li><b>Rebuild UserProfile from cache</b><span>Including doctorId/doctorEmail for assistants — skips the expensive discovery lookup on warm restarts.</span></li>
+        <li><b>Read last-active tab</b><span>From SettingsService — default tab 1 (Appointments) for assistants, tab 0 otherwise.</span></li>
+        <li><b>pushReplacement to the role shell</b><span>Pre-seeded with profile + tab index; 300ms fade. Splash is never seen again this process lifetime.</span></li>
+      </ol></div>
+    </section>
+
+    <!-- ══════════════════════════ 5 ══════════════════════════ -->
+    <section id="s5">
+      <h2>5 · Feature Breakdown</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Feature</th><th>Main screens</th><th>ViewModel</th><th>APIs</th></tr></thead>
+        <tbody>
+          <tr><td><span class="role core">core</span> Authentication</td><td>LoginPage, RegistrationPage</td><td>AuthViewModel</td><td><code>POST /auth/login</code>, <code>/users/{doctors,assistants}/register</code> (raw http), <code>/auth/logout</code>, <code>/auth/change-password</code></td></tr>
+          <tr><td><span class="role doctor">doctor</span> Dashboard</td><td>DoctorDashboardPage</td><td>DoctorViewModel</td><td>Derived from already-loaded state; fl_chart</td></tr>
+          <tr><td>Patients</td><td>Role-specific list/detail pages</td><td>Doctor/Assistant/AdminViewModel</td><td><code>/clinic/patients</code>, <code>/clinic/conditions</code></td></tr>
+          <tr><td>Appointments</td><td>Role variants</td><td>Doctor/AssistantViewModel</td><td><code>/clinic/appointments</code>, <code>/clinic/appointment-types</code></td></tr>
+          <tr><td><span class="role doctor">doctor</span> Consultation / Visits</td><td>DoctorConsultationPage + 6 tabs</td><td>DoctorViewModel</td><td><code>/clinic/visits</code>, <code>/clinic/patient-vitals</code></td></tr>
+          <tr><td>AI Voice Reporting</td><td>VoiceTab → VoiceReportReviewPage</td><td>DoctorViewModel</td><td><code>record</code> pkg → <code>POST /reports/transcribe</code> → <code>/reports/medical-reports</code></td></tr>
+          <tr><td>AI Medical Imaging</td><td>AIImagingTab → AIImagingReviewPage</td><td>DoctorViewModel</td><td><code>image_picker</code> → <code>POST /reports/medical-images</code> → <code>PATCH .../review</code> (deferred)</td></tr>
+          <tr><td>Manual Reports</td><td>ManualReportTab</td><td>DoctorViewModel</td><td><code>POST /reports/medical-reports</code>, <code>PATCH .../status</code></td></tr>
+          <tr><td>Report Finalization</td><td>DoctorConsultationPage._save</td><td>DoctorViewModel.finalizeReport</td><td><code>POST .../finalize</code> (120s timeout, sync PDF+WhatsApp)</td></tr>
+          <tr><td>Lab Reports</td><td>LabReportsPage/Tab, LabReportViewerPage</td><td>DoctorViewModel</td><td><code>POST /reports/lab-reports</code>, authenticated download</td></tr>
+          <tr><td>Patient History (in-consultation)</td><td>PatientHistoryTab</td><td>DoctorViewModel</td><td>Parallel fetch: visits + reports + images + per-visit labs</td></tr>
+          <tr><td>Finance</td><td>DoctorFinancePage, AssistantPaymentsPage</td><td>Doctor/AssistantViewModel</td><td>Derived from appointment <code>fee</code>/<code>is_paid</code> — no dedicated endpoint</td></tr>
+          <tr><td><span class="role admin">admin</span> Console</td><td>Dashboard, Users, Patients, Audit Logs</td><td>AdminViewModel</td><td><code>/admin/dashboard/stats</code>, <code>/users/*</code>, <code>/reports/audit-logs</code></td></tr>
+          <tr><td>Settings</td><td>Bottom-sheet stacks per role</td><td>SettingsViewModel (doctor) / inline (others)</td><td><code>SettingsService</code>, <code>changePassword</code>, fee sync</td></tr>
+          <tr><td>Localization / Theming</td><td>—</td><td>LocaleNotifier, themeModeProvider</td><td><code>shared_preferences</code></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ══════════════════════════ 6 ══════════════════════════ -->
+    <section id="s6">
+      <h2>6 · Data Flow</h2>
+      <p>Standard direction — e.g. loading the patient list:</p>
+      <div class="diagram"><div class="flow">
+        <div class="node"><b>View</b>initState / action</div>
+        <div class="conn">→</div>
+        <div class="node"><b>ViewModel</b>fetchPatients()</div>
+        <div class="conn">→</div>
+        <div class="node"><b>ApiService</b>Dio GET</div>
+        <div class="conn">→</div>
+        <div class="node"><b>Backend</b>JSON response</div>
+        <div class="conn">→</div>
+        <div class="node"><b>state.copyWith</b>raw maps stored</div>
+        <div class="conn">→</div>
+        <div class="node"><b>View rebuilds</b>ref.watch</div>
+      </div></div>
+      <p style="margin-top:16px;">No manual <code>setState</code> round-trip is needed — Riverpod's <code>ref.watch</code> triggers a rebuild whenever <code>copyWith</code> produces a new state object.</p>
+
+      <h3>The one workflow worth tracing end-to-end: consultation completion</h3>
+      <div class="diagram"><ol class="seq">
+        <li><b>Resolve the active visit</b><span><code>ensureVisitExists()</code></span></li>
+        <li><b>If a voice/manual report exists in DRAFT/REVIEWED</b><span><code>DoctorViewModel.finalizeReport(reportId)</code> — promotes DRAFT→REVIEWED first if needed, then <code>POST .../finalize</code> (120s timeout; backend generates PDF + sends WhatsApp, fire-and-forget on its side — report is FINALIZED even if WhatsApp fails)</span></li>
+        <li><b>Submit staged AI-imaging confirmations</b><span><code>reviewMedicalImage(imageId, diff)</code> once per image</span></li>
+        <li><b>Mark visit COMPLETED</b><span><code>updateVisitStatus</code></span></li>
+        <li><b>Mark appointment COMPLETED</b><span><code>updateAppointmentStatus</code></span></li>
+        <li><b>Refresh appointment list</b><span><code>fetchAppointments()</code></span></li>
+      </ol></div>
+      <div class="note">Imaging-only consultations (no voice/manual report) skip step 2 entirely — there is no "anchor" empty report created for them; a follow-up fix removed that behavior because it caused a duplicate WhatsApp send.</div>
+    </section>
+
+    <!-- ══════════════════════════ 7 ══════════════════════════ -->
+    <section id="s7">
+      <h2>7 · State Management</h2>
+      <ul>
+        <li><b>Solution:</b> <code>flutter_riverpod ^2.5.1</code> — <code>StateNotifierProvider</code> + <code>StateNotifier&lt;T&gt;</code> for every stateful feature, plus a couple of plain <code>StateProvider</code>s and one hand-rolled notifier for locale.</li>
+        <li><b>Initialization:</b> a single <code>ProviderScope</code> wraps the app in <code>main()</code>. No provider overrides anywhere (no test/mock wiring present).</li>
+        <li><b>Managing classes:</b> <code>AuthViewModel</code>, <code>DoctorViewModel</code>, <code>AssistantViewModel</code>, <code>AdminViewModel</code>, <code>SettingsViewModel</code>, <code>LocaleNotifier</code> — each paired with an immutable <code>*State</code> + <code>copyWith</code>.</li>
+        <li><b>UI updates:</b> views are <code>ConsumerWidget</code>/<code>ConsumerStatefulWidget</code>; <code>ref.watch</code> rebuilds, <code>ref.read(...).method()</code> triggers actions, <code>ref.listen</code> runs one-shot side effects like post-login navigation.</li>
+        <li><b>No <code>autoDispose</code>:</b> called out explicitly in three of the four provider files' own comments — state survives navigation so cached IDs/lookups aren't repeated, at the cost of needing manual invalidation on logout (<code>authLogoutCleanupProvider</code>).</li>
+        <li><b>Local-only UI state</b> (tab index, form controllers, animations) stays as plain <code>State</code>/<code>setState</code> — not lifted into Riverpod.</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════ 8 ══════════════════════════ -->
+    <section id="s8">
+      <h2>8 · API Layer</h2>
+      <ul>
+        <li><b>Single gateway:</b> <span class="path">lib/services/API_Service.dart</span> — one static <code>Dio</code> instance, ~60 endpoint methods. Exception: <code>auth_viewmodel.dart</code> uses the raw <code>http</code> package (not <code>_dio</code>) for the two self-registration endpoints — those calls bypass the shared interceptor entirely, so they get no standardized error-detail extraction and no 401 handling.</li>
+        <li><b>Dio config:</b> base URL from <code>AppConfig.backendBaseUrl</code> (default <code>https://backend.hakim-app.cloud</code>), 30s connect / 60s receive timeout (bumped to 120s just for <code>finalizeReport</code>).</li>
+        <li><b>Interceptor:</b> <code>onRequest</code> injects <code>X-API-KEY</code> + Bearer token and logs the call; <code>onResponse</code> logs status; <code>onError</code> extracts a readable <code>detail</code> from FastAPI-style bodies and — on <b>401</b> — clears stored credentials and fires the app-wide logout callback, guarded against double-firing.</li>
+        <li><b>Base URL / key location:</b> <span class="path">lib/config/app_config.dart</span> — all four values are <code>String.fromEnvironment</code> with hardcoded fallbacks, meaning the production API key currently ships baked into the client binary as a fallback constant.</li>
+        <li><b><code>aiApiBaseUrl</code>:</b> defined but not referenced anywhere else in <code>lib/</code> — voice/imaging calls go through the main backend. Worth confirming with the backend team whether a direct-to-AI path is planned.</li>
+        <li><b>Auth flow:</b> <code>POST /auth/login</code> → JWT stored in <code>flutter_secure_storage</code> → role decoded client-side from the payload (base64url-decoded manually, <b>not signature-verified</b> — acceptable here since claims only drive UI routing, never authorization) → profile enriched by cross-referencing <code>/users/doctors</code>/<code>/users/assistants</code> by email → persisted for session restore.</li>
+        <li><b>Token storage:</b> <code>flutter_secure_storage</code>, keys <code>access_token</code> / <code>user_role</code> / <code>user_profile</code> (a JSON blob of the whole profile, so cold start redraws the UI with zero network calls).</li>
+        <li><b>Error handling:</b> <span class="path">errors/error_handler.dart</span> classifies everything into an <code>AppError</code> with a log-only <code>technical</code> string and a display-ready <code>userMessage</code>.</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════ 9 ══════════════════════════ -->
+    <section id="s9">
+      <h2>9 · Models</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Model</th><th>Represents</th><th>Built from / used by</th></tr></thead>
+        <tbody>
+          <tr><td><code>UserProfile</code></td><td>The logged-in user across all 3 roles, incl. assistant→doctor linkage</td><td><code>AuthViewModel._buildProfile</code>; restored from secure storage cold-start</td></tr>
+          <tr><td><code>RegistrationData</code></td><td>Self-registration form payload</td><td><code>RegistrationPage</code> → <code>AuthViewModel.register()</code></td></tr>
+          <tr><td><code>AppError</code> / <code>AppErrorType</code></td><td>A classified, typed exception with a user-safe message</td><td><code>ErrorHandler.parse()</code></td></tr>
+          <tr><td><code>AdminStats</code></td><td>Aggregate counts for the admin dashboard</td><td><code>/admin/dashboard/stats</code> or client aggregation</td></tr>
+          <tr><td><code>AdminUser</code></td><td>Normalized user row; distinguishes profile-table PK from users-table PK for status updates</td><td><code>/users/{doctors,assistants,admins}</code></td></tr>
+          <tr><td><code>AuditLog</code></td><td>One audit entry, tolerant of several backend field-name variants</td><td><code>/reports/audit-logs</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="note warn"><b>Everything else — Patient, Appointment, Visit, MedicalReport, MedicalImage, LabReport, Vitals, AppointmentType — is a raw <code>Map&lt;String,dynamic&gt;</code>, never a typed class.</b> This is consistent across every ViewModel and widget (e.g. <code>appointment['patient_first_name']</code>). It's the single biggest thing to internalize before changing this code: there's no compiler-enforced schema for these objects, and field-name mismatches with the backend (several fixed in code comments — e.g. lab-report <code>report_url</code> vs <code>report_file</code>) are a recurring bug source precisely because of this.</div>
+    </section>
+
+    <!-- ══════════════════════════ 10 ══════════════════════════ -->
+    <section id="s10">
+      <h2>10 · Navigation</h2>
+      <ul>
+        <li><b>Routing system:</b> none of the router packages — plain <code>Navigator.push(MaterialPageRoute(...))</code> for drill-in, <code>pushReplacement</code>/<code>pushAndRemoveUntil</code> for full-stack swaps.</li>
+        <li><b>Initial route:</b> decided imperatively in <code>main.dart</code>'s <code>_resolveInitialScreen()</code> — a widget returned by a function, not a named route.</li>
+        <li><b>Named routes:</b> not used — <code>MaterialApp</code> has no <code>routes:</code>/<code>onGenerateRoute:</code>.</li>
+        <li><b>Role-based navigation:</b> each role shell owns a hand-built bottom nav (a <code>Row</code> of <code>InkWell</code>s, not Flutter's <code>BottomNavigationBar</code>). Selected index is persisted per-role via <code>SettingsService.setLastTab</code>. Switching roles only happens by logging out and back in.</li>
+        <li><b>Consultation sub-nav:</b> a <code>TabController</code>-driven <code>TabBarView</code>, 6 tabs, <code>NeverScrollableScrollPhysics</code> — reachable only via the TabBar, not swipe.</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════ 11 ══════════════════════════ -->
+    <section id="s11">
+      <h2>11 · Dependency Graph</h2>
+      <div class="diagram"><div class="stack">
+        <div class="layer navy"><b>main.dart</b>ApiService.init() → ProviderScope → MyApp</div>
+        <div class="arrow">↓</div>
+        <div class="layer navy"><b>_StartupRouter</b>resolves session → Doctor / Assistant / AdminInterface</div>
+        <div class="arrow">↓</div>
+        <div class="layer teal"><b>Providers</b>doctorViewModelProvider, assistantViewModelProvider, adminViewModelProvider…</div>
+        <div class="arrow">↓</div>
+        <div class="layer teal"><b>ViewModels (StateNotifier)</b>business logic, pagination, caching</div>
+        <div class="arrow">↓</div>
+        <div class="layer"><b>ApiService (static)</b>→ Dio → Backend</div>
+      </div></div>
+      <p style="margin-top:14px;">In parallel: <b>Views</b> read Providers directly and render <b>Widgets</b>, styled through the three <b>Theme extensions</b> aggregated by <code>AppThemes.light</code>/<code>.dark</code>. Cross-cutting, read from almost every layer: <code>l10n/generated/app_localizations.dart</code> and <code>errors/*</code>.</p>
+    </section>
+
+    <!-- ══════════════════════════ 12 ══════════════════════════ -->
+    <section id="s12">
+      <h2>12 · Learning Order</h2>
+      <p>Fastest path to a working mental model of this specific codebase:</p>
+      <div class="diagram"><ol class="seq">
+        <li><b>main.dart</b><span>Startup + session resolution</span></li>
+        <li><b>config/app_config.dart + services/API_Service.dart</b><span>What the backend looks like from the client's point of view</span></li>
+        <li><b>errors/app_error.dart + error_handler.dart</b><span>How failures surface everywhere else</span></li>
+        <li><b>model/UserProfile.dart</b><span>The one shared identity object</span></li>
+        <li><b>auth_viewmodel.dart + login_page.dart</b><span>Login → role resolution → routing</span></li>
+        <li><b>doctor_providers.dart → doctor_viewmodel.dart</b><span><code>DoctorState</code> first, then CRUD — the template every other ViewModel follows</span></li>
+        <li><b>doctor_interface.dart</b><span>How a role shell wires provider + tabs + theme together</span></li>
+        <li><b>doctor_patients_page.dart / doctor_appointments_page.dart</b><span>The standard list/search/paginate/create pattern, reused everywhere</span></li>
+        <li><b>doctor_consultation_page.dart</b><span>Most complex single screen — read after step 6</span></li>
+        <li><b>consultation/* in tab order</b><span>vitals → history → voice → imaging → lab → manual</span></li>
+        <li><b>assistant_viewmodel.dart</b><span>Mostly a mirror of step 6 — focus on the doctor-resolution chain</span></li>
+        <li><b>admin_viewmodel.dart + views/admin/*</b><span>Smallest, most self-contained role</span></li>
+        <li><b>settings_viewmodel.dart + doctor/settings/*</b><span>Cross-cutting preferences, briefly touches every backend area</span></li>
+        <li><b>app_themes.dart + one role theme</b><span>Theming mechanics</span></li>
+        <li><b>l10n/app_en.arb</b><span>Skim for the localization key vocabulary — skip the generated Dart</span></li>
+      </ol></div>
+    </section>
+
+    <!-- ══════════════════════════ 13 ══════════════════════════ -->
+    <section id="s13">
+      <h2>13 · Files Ranked by Importance</h2>
+      <p>Ranked for "read this to actually understand the app," not by line count alone.</p>
+      <div class="twrap"><table>
+        <thead><tr><th>#</th><th>File</th><th>Reason</th><th>Difficulty</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><span class="path">services/API_Service.dart</span></td><td>Defines the entire backend contract the app is built against</td><td>Medium</td></tr>
+          <tr><td>2</td><td><span class="path">main.dart</span></td><td>Entry point, session bootstrap, global 401 wiring</td><td>Low</td></tr>
+          <tr><td>3</td><td><span class="path">viewmodels/doctor_viewmodel.dart</span></td><td>Largest, most representative business-logic file — the template for the other three</td><td>High</td></tr>
+          <tr><td>4</td><td><span class="path">viewmodels/auth_viewmodel.dart</span></td><td>Login/registration/role-resolution, incl. JWT-decode-and-fallback-scan</td><td>Medium</td></tr>
+          <tr><td>5</td><td><span class="path">doctor_pages/doctor_consultation_page.dart</span></td><td>Core clinical workflow — visits, 6 tabs, finalization</td><td>High</td></tr>
+          <tr><td>6</td><td><span class="path">model/UserProfile.dart</span></td><td>Small but load-bearing — every "who's logged in" screen depends on it</td><td>Low</td></tr>
+          <tr><td>7</td><td><span class="path">errors/error_handler.dart</span></td><td>Explains why error messages look the way they do everywhere</td><td>Low</td></tr>
+          <tr><td>8</td><td><span class="path">errors/app_error.dart</span></td><td>The typed-error vocabulary used in every catch block</td><td>Low</td></tr>
+          <tr><td>9</td><td><span class="path">viewmodels/assistant_viewmodel.dart</span></td><td>2nd-largest ViewModel; doctor-linkage resolution is the one truly new idea</td><td>High</td></tr>
+          <tr><td>10</td><td><span class="path">config/app_config.dart</span></td><td>Tiny, but explains every base URL/key you'll see logged</td><td>Low</td></tr>
+          <tr><td>11</td><td><span class="path">consultation/patient_history_tab.dart</span></td><td>Largest view file — the "aggregate several endpoints into one screen" pattern</td><td>High</td></tr>
+          <tr><td>12</td><td><span class="path">doctor_pages/doctor_interface.dart</span></td><td>Canonical role shell: top bar + tabs + theme + logout</td><td>Low</td></tr>
+          <tr><td>13</td><td><span class="path">viewmodels/admin_viewmodel.dart</span></td><td>Compact; introduces the profile-PK vs users-table-PK distinction</td><td>Medium</td></tr>
+          <tr><td>14</td><td><span class="path">views/auths/login_page.dart</span></td><td><code>ref.listen</code>-for-navigation pattern + forced-English-locale override</td><td>Medium</td></tr>
+          <tr><td>15</td><td><span class="path">providers/auth_providers.dart</span></td><td>Small, but explains cross-provider logout-invalidation</td><td>Low</td></tr>
+          <tr><td>16</td><td><span class="path">consultation/ai_imaging_review_page.dart</span></td><td>Most intricate single interaction: stage-locally-then-submit-once-at-finalize</td><td>High</td></tr>
+          <tr><td>17</td><td><span class="path">viewmodels/settings_viewmodel.dart</span></td><td>The create-then-recover-by-fetch pattern for fee-default sync</td><td>Medium</td></tr>
+          <tr><td>18</td><td><span class="path">lab_reports/lab_report_viewer_page.dart</span></td><td>Authenticated-download-then-open-locally — needed for any backend-hosted file</td><td>Medium</td></tr>
+          <tr><td>19</td><td><span class="path">utils/app_themes.dart</span></td><td>How 3 role themes coexist inside 2 global ThemeDatas</td><td>Medium</td></tr>
+          <tr><td>20</td><td><span class="path">doctor_pages/doctor_dashboard.dart</span></td><td>Composing already-loaded state into charts/cards</td><td>Medium</td></tr>
+          <tr><td>21</td><td><span class="path">views/assistant/assistant_interface.dart</span></td><td>The "re-wrap dialogs in Theme manually" gotcha</td><td>Low</td></tr>
+          <tr><td>22</td><td><span class="path">views/admin/admin_users_page.dart</span></td><td>Standard filtered/searchable list pattern, admin variant</td><td>Medium</td></tr>
+          <tr><td>23</td><td><span class="path">consultation/voice_report_review_page.dart</span></td><td>AI-draft-review UX pattern (mirrored by imaging review)</td><td>Medium</td></tr>
+          <tr><td>24</td><td><span class="path">consultation/manual_report_tab.dart</span></td><td>Simplest report-entry tab — good baseline before voice/imaging</td><td>Low</td></tr>
+          <tr><td>25</td><td><span class="path">doctor_pages/doctor_patient_detail.dart</span></td><td>Largest patient-facing screen — aggregates conditions/appointments/reports/images/labs</td><td>High</td></tr>
+          <tr><td>26</td><td><span class="path">providers/assistant_providers.dart</span></td><td>One line of wiring, but its comment explains why no autoDispose — read once, apply everywhere</td><td>Low</td></tr>
+          <tr><td>27</td><td><span class="path">views/admin/admin_audit_logs_page.dart</span></td><td>Pagination + multi-filter UI pattern at its most developed</td><td>Medium</td></tr>
+          <tr><td>28</td><td><span class="path">utils/clinic_helpers.dart</span></td><td>Small helper shared by both clinical ViewModels — know it exists before duplicating logic</td><td>Low</td></tr>
+          <tr><td>29</td><td><span class="path">doctor_pages/doctor_settings_page.dart</span></td><td>Largest settings file — bottom-sheet-of-bottom-sheets composition</td><td>High</td></tr>
+          <tr><td>30</td><td><span class="path">l10n/app_en.arb</span></td><td>Not Dart, but the fastest way to see every user-facing string key</td><td>Low</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ══════════════════════════ 14 ══════════════════════════ -->
+    <section id="s14">
+      <h2>14 · Diagrams</h2>
+
+      <h3>Overall architecture</h3>
+      <div class="diagram"><div class="stack">
+        <div class="layer navy"><b>View layer</b>ConsumerWidget / ConsumerStatefulWidget — ref.watch / ref.read</div>
+        <div class="arrow">↕</div>
+        <div class="layer teal"><b>State layer (Riverpod)</b>Provider → StateNotifier ViewModel</div>
+        <div class="arrow">↕</div>
+        <div class="layer"><b>Gateway layer</b>ApiService (static) → Dio + interceptor</div>
+        <div class="arrow">↕ HTTPS + X-API-KEY + Bearer</div>
+        <div class="layer navy"><b>Backend</b>FastAPI @ backend.hakim-app.cloud <span style="opacity:.7">(proxies to AI microservice server-side)</span></div>
+      </div></div>
+      <p style="margin-top:10px; font-size:.85rem; color:var(--ink-soft);">A 401 anywhere in the Gateway layer short-circuits straight up to the global logout handler registered in <code>main.dart</code>, bypassing the normal state flow.</p>
+
+      <h3>Folder relationships</h3>
+      <div class="diagram"><div class="flow">
+        <div class="node"><b>views</b></div><div class="conn">→</div>
+        <div class="node"><b>widgets</b></div><div class="conn">·</div>
+        <div class="node"><b>providers</b></div><div class="conn">→</div>
+        <div class="node"><b>viewmodels</b></div><div class="conn">→</div>
+        <div class="node"><b>services</b></div><div class="conn">→</div>
+        <div class="node"><b>config / errors</b></div>
+      </div>
+      <p style="margin:14px 0 0; font-size:.85rem; color:var(--ink-soft);"><code>views</code> also reaches sideways into <code>utils</code> (theming) and <code>l10n</code>; <code>viewmodels</code> and <code>views</code> both reach into <code>model</code>.</p></div>
+
+      <h3>Login flow</h3>
+      <div class="diagram"><ol class="seq">
+        <li><b>User submits email/password</b><span>LoginPage</span></li>
+        <li><b>AuthViewModel.login()</b><span><code>POST /auth/login</code> via ApiService (+ X-API-KEY)</span></li>
+        <li><b>Backend returns access_token</b><span>Stored via <code>saveToken</code></span></li>
+        <li><b>Decode JWT payload client-side</b><span>Extract role + sub — no signature check</span></li>
+        <li><b>Enrich profile</b><span>Role known → <code>getDoctors()</code>/<code>getAssistants()</code> match by email. Role ambiguous → scan doctors, assistants, admins by email in turn</span></li>
+        <li><b>Persist session</b><span><code>saveRole</code> + <code>saveUserProfile</code></span></li>
+        <li><b>AuthState updates</b><span><code>isAuthenticated: true</code>, <code>destination</code> set</span></li>
+        <li><b>ref.listen fires in LoginPage</b><span><code>pushReplacement</code> to Doctor / Assistant / AdminInterface</span></li>
+      </ol></div>
+
+      <h3>Navigation flow</h3>
+      <div class="diagram"><div class="cards3">
+        <div class="rolecard doctor"><h5>App start</h5><ul><li>SplashScreen</li><li>Valid session? → role shell</li><li>Invalid/expired → LoginPage</li></ul></div>
+        <div class="rolecard assistant"><h5>Role shells (4 tabs each)</h5><ul><li>Doctor: Dashboard·Appts·Patients·Finance</li><li>Assistant: Dashboard·Appts·Patients·Payments</li><li>Admin: Dashboard·Users·Patients·Logs</li></ul></div>
+        <div class="rolecard admin"><h5>Deeper flows</h5><ul><li>Doctor: appointment → Consultation (6 tabs) → back to shell on complete</li><li>Any role: Sign Out → LoginPage</li></ul></div>
+      </div></div>
+    </section>
+
+    <div class="note warn">
+      <b>Notes on report scope.</b> Per the task rules, this document is analysis-only — no code was modified, refactored, or generated. Two things surfaced during the read that a maintainer may want to act on separately:
+      <ul style="margin:8px 0 0;">
+        <li><code>views/assistant/assistant_patient_detail.dart</code> appears to be an unused duplicate of <code>widgets/assistant/assistant_patient_detail.dart</code> — only the <code>widgets/</code> copy is imported anywhere.</li>
+        <li><code>AppConfig.aiApiBaseUrl</code> is defined but never referenced by any other file in <code>lib/</code> — worth confirming whether a direct-to-AI client path is planned.</li>
+      </ul>
+    </div>
+
+    <footer class="foot">Hakim Architecture Overview · generated by reading <code>lib/**/*.dart</code> (~50,800 lines, 90 files) · a plain-Markdown copy lives at <code>ARCHITECTURE_OVERVIEW.md</code> in the project root.</footer>
+  </main>
+</div>

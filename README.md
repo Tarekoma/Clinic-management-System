@@ -34,7 +34,7 @@ The application integrates **Artificial Intelligence** to assist doctors with sp
 
 | Patient History | Consultation | Medical Report |
 |-------------------|------------------------|--------------|
-| <img width="250" height="500" alt="image" src="https://github.com/user-attachments/assets/6365ebc8-de12-43dc-bf5d-ce3022e307e2" /> | <img width="250" height="500" alt="image" src="https://github.com/user-attachments/assets/c9396df1-6634-4801-a33d-267e8b7a6859" />| <img width="200" height="644" alt="image" src="https://github.com/user-attachments/assets/289586de-1e04-4e13-9a9a-7c4b0c2f367d" /> | 
+| <img width="250" height="500" alt="image" src="https://github.com/user-attachments/assets/6365ebc8-de12-43dc-bf5d-ce3022e307e2" /> | <img width="250" height="500" alt="image" src="https://github.com/user-attachments/assets/c9396df1-6634-4801-a33d-267e8b7a6859" />| <img width="250" height="644" alt="image" src="https://github.com/user-attachments/assets/289586de-1e04-4e13-9a9a-7c4b0c2f367d" /> | 
 
 </div>
 
